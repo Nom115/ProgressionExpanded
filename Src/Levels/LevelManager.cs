@@ -1,5 +1,5 @@
 using Terraria;
-using ProgressionExpanded.Src.Levels.PlayerLevel;
+using ProgressionExpanded.Src.Levels.PlayerSystems;
 using ProgressionExpanded.Src.Levels.WorldLevel;
 
 namespace ProgressionExpanded.Src.Levels

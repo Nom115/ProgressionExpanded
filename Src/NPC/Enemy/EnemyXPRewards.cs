@@ -1,6 +1,6 @@
 using Terraria;
 using Terraria.ModLoader;
-using ProgressionExpanded.Src.Levels.PlayerLevel;
+using ProgressionExpanded.Src.Levels.PlayerSystems;
 using ProgressionExpanded.Src.NPCs;
 using ProgressionExpanded.Src.NPCs.Enemy;
 

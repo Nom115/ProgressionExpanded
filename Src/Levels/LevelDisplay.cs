@@ -5,7 +5,7 @@ using Terraria;
 using Terraria.DataStructures;
 using Terraria.GameContent;
 using Terraria.ModLoader;
-using ProgressionExpanded.Src.Levels.PlayerLevel;
+using ProgressionExpanded.Src.Levels.PlayerSystems;
 using ProgressionExpanded.Src.NPCs;
 
 namespace ProgressionExpanded.Src.Levels

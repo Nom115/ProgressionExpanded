@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework;
 using ProgressionExpanded.Utils.DataManagers;
 using ProgressionExpanded.Src.Levels.WorldLevel;
 
-namespace ProgressionExpanded.Src.Levels.PlayerLevel
+namespace ProgressionExpanded.Src.Levels.PlayerSystems
 {
 	/// <summary>
 	/// Manages player level and experience points.
@@ -155,13 +155,16 @@ namespace ProgressionExpanded.Src.Levels.PlayerLevel
 			// Store the new level
 			SetLevel(player, newLevel);
 
+			// Award 1 passive point per level
+			PassivePointManager.AwardPlayerPoints(player, 1);
+
 			// Increase world level when player levels up
 			WorldLevelManager.IncreaseWorldLevel(1);
 
 			// Show level up message in chat
 			if (Main.netMode != NetmodeID.Server)
 			{
-				string levelUpMessage = $"Level Up! You are now level {newLevel}!";
+				string levelUpMessage = $"Level Up! You are now level {newLevel}! (+1 Passive Point)";
 				Main.NewText(levelUpMessage, new Color(100, 255, 100)); // Green text
 				
 				// Show floating combat text

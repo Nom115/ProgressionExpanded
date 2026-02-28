@@ -5,7 +5,7 @@ using Terraria;
 using Terraria.GameContent;
 using Terraria.ModLoader;
 using Terraria.UI;
-using ProgressionExpanded.Src.Levels.PlayerLevel;
+using ProgressionExpanded.Src.Levels.PlayerSystems;
 using ProgressionExpanded.Src.Config;
 
 namespace ProgressionExpanded.Src.UI

@@ -10,8 +10,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 	/// </summary>
 	public class PlayerHealthManager : ModPlayer
 	{
-		// Vanilla maximum health is 500 (400 base + 100 from life fruit)
-		private const int VANILLA_MAX_HEALTH = 500;
+		private const int VANILLA_MAX_HEALTH = 400;
 		private const string BONUS_HEALTH_KEY = "BonusMaxHealth";
 
 		// Cached bonus health for this session

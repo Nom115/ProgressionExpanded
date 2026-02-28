@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Terraria.ModLoader;
 using ProgressionExpanded.Utils;
+using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
 
 namespace ProgressionExpanded
 {
@@ -15,12 +16,18 @@ namespace ProgressionExpanded
 		{
 			// Initialize mod bridge to check for other mods
 			ModBridge.Initialize();
+			
+			// Load passive trees from JSON
+			PassiveTreeLoader.LoadAllTrees(this);
 		}
 
 		public override void Unload()
 		{
 			// Clean up mod references
 			ModBridge.Unload();
+			
+			// Unload passive trees
+			PassiveTreeLoader.UnloadTrees();
 		}
 	}
 }

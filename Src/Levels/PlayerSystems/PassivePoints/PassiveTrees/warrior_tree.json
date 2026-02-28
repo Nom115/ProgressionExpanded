@@ -1,0 +1,196 @@
+{
+  "TreeId": "warrior_tree",
+  "TreeName": "Path of the Warrior",
+  "Description": "A balanced tree focusing on physical combat and survivability",
+  "Nodes": {
+    "warrior_start": {
+      "NodeId": "warrior_start",
+      "DisplayName": "Combat Training",
+      "Description": "Basic combat training increases your effectiveness in battle",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "PositionX": 0,
+      "PositionY": 0,
+      "FlatBonuses": {
+        "GenericDamage": 2.0,
+        "Defense": 1.0
+      },
+      "PercentBonuses": {}
+    },
+    "melee_focus": {
+      "NodeId": "melee_focus",
+      "DisplayName": "Melee Mastery",
+      "Description": "Enhances melee weapon proficiency",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": ["warrior_start"],
+      "PositionX": -2,
+      "PositionY": 1,
+      "FlatBonuses": {
+        "MeleeDamage": 3.0
+      },
+      "PercentBonuses": {
+        "MeleeDamage": 0.02
+      }
+    },
+    "ranged_focus": {
+      "NodeId": "ranged_focus",
+      "DisplayName": "Ranged Precision",
+      "Description": "Improves accuracy and damage with ranged weapons",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": ["warrior_start"],
+      "PositionX": 2,
+      "PositionY": 1,
+      "FlatBonuses": {
+        "RangedDamage": 3.0
+      },
+      "PercentBonuses": {
+        "RangedDamage": 0.02
+      }
+    },
+    "iron_skin": {
+      "NodeId": "iron_skin",
+      "DisplayName": "Iron Skin",
+      "Description": "Your skin hardens, increasing defense",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["warrior_start"],
+      "PositionX": 0,
+      "PositionY": 1,
+      "FlatBonuses": {
+        "Defense": 3.0
+      },
+      "PercentBonuses": {}
+    },
+    "critical_strikes": {
+      "NodeId": "critical_strikes",
+      "DisplayName": "Critical Strikes",
+      "Description": "Increases critical strike chance",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": ["melee_focus", "ranged_focus"],
+      "PositionX": 0,
+      "PositionY": 2,
+      "FlatBonuses": {
+        "CritChance": 2.0
+      },
+      "PercentBonuses": {}
+    },
+    "swift_strikes": {
+      "NodeId": "swift_strikes",
+      "DisplayName": "Swift Strikes",
+      "Description": "Attack faster with all weapons",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["melee_focus"],
+      "PositionX": -3,
+      "PositionY": 2,
+      "FlatBonuses": {},
+      "PercentBonuses": {
+        "AttackSpeed": 0.03
+      }
+    },
+    "armor_penetration": {
+      "NodeId": "armor_penetration",
+      "DisplayName": "Armor Breaker",
+      "Description": "Your attacks pierce enemy defenses",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["critical_strikes"],
+      "PositionX": 0,
+      "PositionY": 3,
+      "FlatBonuses": {
+        "ArmorPenetration": 3.0
+      },
+      "PercentBonuses": {}
+    },
+    "vitality_boost": {
+      "NodeId": "vitality_boost",
+      "DisplayName": "Vitality",
+      "Description": "Increases maximum health",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": ["iron_skin"],
+      "PositionX": -1,
+      "PositionY": 2,
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "regeneration": {
+      "NodeId": "regeneration",
+      "DisplayName": "Regeneration",
+      "Description": "Heal faster over time",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["iron_skin"],
+      "PositionX": 1,
+      "PositionY": 2,
+      "FlatBonuses": {
+        "LifeRegen": 2.0
+      },
+      "PercentBonuses": {}
+    },
+    "endurance": {
+      "NodeId": "endurance",
+      "DisplayName": "Endurance",
+      "Description": "Reduces damage taken",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["vitality_boost", "regeneration"],
+      "PositionX": 0,
+      "PositionY": 3,
+      "FlatBonuses": {},
+      "PercentBonuses": {
+        "Endurance": 0.02
+      }
+    },
+    "movement_speed": {
+      "NodeId": "movement_speed",
+      "DisplayName": "Fleet Footed",
+      "Description": "Move faster in combat",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": ["swift_strikes"],
+      "PositionX": -3,
+      "PositionY": 3,
+      "FlatBonuses": {},
+      "PercentBonuses": {
+        "MovementSpeed": 0.03
+      }
+    },
+    "knockback_power": {
+      "NodeId": "knockback_power",
+      "DisplayName": "Knockback Power",
+      "Description": "Your attacks knock enemies back further",
+      "MaxTier": 2,
+      "PointsPerTier": 1,
+      "Prerequisites": ["ranged_focus"],
+      "PositionX": 3,
+      "PositionY": 2,
+      "FlatBonuses": {},
+      "PercentBonuses": {
+        "Knockback": 0.05
+      }
+    },
+    "battle_master": {
+      "NodeId": "battle_master",
+      "DisplayName": "Battle Master",
+      "Description": "The pinnacle of warrior training",
+      "MaxTier": 1,
+      "PointsPerTier": 2,
+      "Prerequisites": ["armor_penetration", "endurance"],
+      "PositionX": 0,
+      "PositionY": 4,
+      "FlatBonuses": {
+        "GenericDamage": 10.0,
+        "Defense": 5.0
+      },
+      "PercentBonuses": {
+        "GenericDamage": 0.05,
+        "Endurance": 0.03
+      }
+    }
+  }
+}
