@@ -3,6 +3,7 @@ using Terraria;
 using Terraria.ModLoader;
 using ProgressionExpanded.Utils.DataManagers;
 using Newtonsoft.Json;
+using Microsoft.Xna.Framework;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 {
@@ -153,6 +154,64 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			// Clear allocations
 			treeAllocations[treeId].Clear();
+			SaveAllocations();
+			RecalculateBonuses();
+		}
+
+		/// <summary>
+		/// Reset all trees (refund all points)
+		/// </summary>
+		public void ResetAllTrees()
+		{
+			// Calculate total points to refund from all trees
+			int totalRefund = 0;
+			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
+			
+			// Debug: Show current state
+			Main.NewText($"Before reset - Available: {pointManager.GetAvailablePoints()}, Spent: {pointManager.GetSpentPoints()}", Color.Cyan);
+			
+			// Create a copy of the keys to avoid collection modification issues
+			List<string> treeIds = new List<string>(treeAllocations.Keys);
+			
+			foreach (var treeId in treeIds)
+			{
+				if (!treeAllocations.ContainsKey(treeId))
+					continue;
+					
+				PassiveTree tree = PassiveTreeLoader.GetTree(treeId);
+				if (tree == null)
+				{
+					Main.NewText($"Warning: Tree '{treeId}' not found!", Color.Orange);
+					continue;
+				}
+
+				foreach (var allocation in treeAllocations[treeId])
+				{
+					PassiveNode node = tree.GetNode(allocation.Key);
+					if (node != null)
+					{
+						int nodeCost = node.GetTotalPointCost(allocation.Value);
+						totalRefund += nodeCost;
+						Main.NewText($"  Node {allocation.Key} tier {allocation.Value} = {nodeCost} points", Color.LightBlue);
+					}
+				}
+			}
+
+			Main.NewText($"Total refund calculated: {totalRefund} points", Color.Yellow);
+
+			// Refund points
+			if (totalRefund > 0)
+			{
+				pointManager.RefundPoints(totalRefund);
+				Main.NewText($"After refund - Available: {pointManager.GetAvailablePoints()}, Spent: {pointManager.GetSpentPoints()}", Color.Lime);
+			}
+			else
+			{
+				Main.NewText("No points to refund!", Color.Red);
+			}
+
+			// Clear all allocations
+			treeAllocations.Clear();
 			SaveAllocations();
 			RecalculateBonuses();
 		}

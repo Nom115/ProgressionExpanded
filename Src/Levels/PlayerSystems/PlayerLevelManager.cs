@@ -169,6 +169,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 				
 				// Show floating combat text
 				CombatText.NewText(player.getRect(), new Color(255, 215, 0), $"LEVEL UP!", true, false);
+				
+				// Special message for level 1 about passive tree
+				if (newLevel == 1)
+				{
+					Main.NewText("Press P to open the Passive Tree and choose your class!", new Color(255, 215, 0));
+				}
 			}
 
 			// Reset XP overflow is handled in AddXP

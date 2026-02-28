@@ -88,3 +88,10 @@ Configs: {
 }
 
 "Keybinds.Toggle Passive Tree.DisplayName": Toggle  Passive  Tree
+
+Buffs: {
+	StaggerDebuff: {
+		Description: Mods.ProgressionExpanded.Buffs.StaggerDebuff.Description
+		DisplayName: Stagger Debuff
+	}
+}

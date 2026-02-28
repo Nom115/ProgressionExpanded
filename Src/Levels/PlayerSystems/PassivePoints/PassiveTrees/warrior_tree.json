@@ -3,15 +3,27 @@
   "TreeName": "Path of the Warrior",
   "Description": "A balanced tree focusing on physical combat and survivability",
   "Nodes": {
+    "stagger_notable": {
+      "NodeId": "stagger_notable",
+      "DisplayName": "Stagger",
+      "Description": "Tier 1: 40% of damage taken is dealt over 4s | Tier 2: 45% over 4.5s | Tier 3: 50% over 5s | Tier 4: 55% over 5.5s",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "PositionX": 0,
+      "PositionY": 0,
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
     "warrior_start": {
       "NodeId": "warrior_start",
       "DisplayName": "Combat Training",
       "Description": "Basic combat training increases your effectiveness in battle",
       "MaxTier": 3,
       "PointsPerTier": 1,
-      "Prerequisites": [],
+      "Prerequisites": ["stagger_notable"],
       "PositionX": 0,
-      "PositionY": 0,
+      "PositionY": 1,
       "FlatBonuses": {
         "GenericDamage": 2.0,
         "Defense": 1.0
@@ -26,7 +38,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["warrior_start"],
       "PositionX": -2,
-      "PositionY": 1,
+      "PositionY": 2,
       "FlatBonuses": {
         "MeleeDamage": 3.0
       },
@@ -42,7 +54,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["warrior_start"],
       "PositionX": 2,
-      "PositionY": 1,
+      "PositionY": 2,
       "FlatBonuses": {
         "RangedDamage": 3.0
       },
@@ -58,7 +70,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["warrior_start"],
       "PositionX": 0,
-      "PositionY": 1,
+      "PositionY": 2,
       "FlatBonuses": {
         "Defense": 3.0
       },
@@ -72,7 +84,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["melee_focus", "ranged_focus"],
       "PositionX": 0,
-      "PositionY": 2,
+      "PositionY": 3,
       "FlatBonuses": {
         "CritChance": 2.0
       },
@@ -86,7 +98,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["melee_focus"],
       "PositionX": -3,
-      "PositionY": 2,
+      "PositionY": 3,
       "FlatBonuses": {},
       "PercentBonuses": {
         "AttackSpeed": 0.03
@@ -100,7 +112,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["critical_strikes"],
       "PositionX": 0,
-      "PositionY": 3,
+      "PositionY": 4,
       "FlatBonuses": {
         "ArmorPenetration": 3.0
       },
@@ -114,7 +126,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["iron_skin"],
       "PositionX": -1,
-      "PositionY": 2,
+      "PositionY": 3,
       "FlatBonuses": {},
       "PercentBonuses": {}
     },
@@ -126,7 +138,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["iron_skin"],
       "PositionX": 1,
-      "PositionY": 2,
+      "PositionY": 3,
       "FlatBonuses": {
         "LifeRegen": 2.0
       },
@@ -140,7 +152,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["vitality_boost", "regeneration"],
       "PositionX": 0,
-      "PositionY": 3,
+      "PositionY": 4,
       "FlatBonuses": {},
       "PercentBonuses": {
         "Endurance": 0.02
@@ -154,7 +166,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["swift_strikes"],
       "PositionX": -3,
-      "PositionY": 3,
+      "PositionY": 4,
       "FlatBonuses": {},
       "PercentBonuses": {
         "MovementSpeed": 0.03
@@ -168,7 +180,7 @@
       "PointsPerTier": 1,
       "Prerequisites": ["ranged_focus"],
       "PositionX": 3,
-      "PositionY": 2,
+      "PositionY": 3,
       "FlatBonuses": {},
       "PercentBonuses": {
         "Knockback": 0.05
@@ -182,7 +194,7 @@
       "PointsPerTier": 2,
       "Prerequisites": ["armor_penetration", "endurance"],
       "PositionX": 0,
-      "PositionY": 4,
+      "PositionY": 5,
       "FlatBonuses": {
         "GenericDamage": 10.0,
         "Defense": 5.0

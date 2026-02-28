@@ -17,35 +17,33 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		private int availablePoints = 0;
 		private int totalPointsEarned = 0;
 		private int spentPoints = 0;
-		private bool initialized = false;
 
 		public override void Initialize()
 		{
-			LoadFromData();
+			availablePoints = 0;
+			totalPointsEarned = 0;
+			spentPoints = 0;
 			initialized = true;
 		}
 
-		private void LoadFromData()
+		public override void SaveData(Terraria.ModLoader.IO.TagCompound tag)
 		{
-			availablePoints = PlayerDataManager.GetInt(Player, AVAILABLE_POINTS_KEY, 0);
-			totalPointsEarned = PlayerDataManager.GetInt(Player, TOTAL_POINTS_KEY, 0);
-			spentPoints = PlayerDataManager.GetInt(Player, SPENT_POINTS_KEY, 0);
+			tag[AVAILABLE_POINTS_KEY] = availablePoints;
+			tag[TOTAL_POINTS_KEY] = totalPointsEarned;
+			tag[SPENT_POINTS_KEY] = spentPoints;
 		}
 
-		private void SaveToData()
+		public override void LoadData(Terraria.ModLoader.IO.TagCompound tag)
 		{
-			PlayerDataManager.SetInt(Player, AVAILABLE_POINTS_KEY, availablePoints);
-			PlayerDataManager.SetInt(Player, TOTAL_POINTS_KEY, totalPointsEarned);
-			PlayerDataManager.SetInt(Player, SPENT_POINTS_KEY, spentPoints);
-		}
+			availablePoints = tag.GetInt(AVAILABLE_POINTS_KEY);
+			totalPointsEarned = tag.GetInt(TOTAL_POINTS_KEY);
+			spentPoints = tag.GetInt(SPENT_POINTS_KEY
 
 		/// <summary>
 		/// Get the number of available (unspent) passive points
 		/// </summary>
 		public int GetAvailablePoints()
 		{
-			if (!initialized)
-				LoadFromData();
 			return availablePoints;
 		}
 
@@ -54,8 +52,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// </summary>
 		public int GetTotalPointsEarned()
 		{
-			if (!initialized)
-				LoadFromData();
 			return totalPointsEarned;
 		}
 
@@ -64,8 +60,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// </summary>
 		public int GetSpentPoints()
 		{
-			if (!initialized)
-				LoadFromData();
 			return spentPoints;
 		}
 
@@ -86,7 +80,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// <summary>
 		/// Spend passive points (returns true if successful)
 		/// </summary>
-		/// <param name="amount">Number of points to spend</param>
 		/// <returns>True if the player had enough points to spend</returns>
 		public bool SpendPoints(int amount)
 		{
@@ -99,8 +92,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			availablePoints -= amount;
 			spentPoints += amount;
 			SaveToData();
-			return true;
-		}
+			
 
 		/// <summary>
 		/// Check if the player has enough points to spend
@@ -124,6 +116,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			spentPoints -= refundAmount;
 			SaveToData();
 		}
+}
 
 		/// <summary>
 		/// Reset all passive points (refund all spent points)
@@ -132,7 +125,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		{
 			availablePoints = totalPointsEarned;
 			spentPoints = 0;
-			SaveToData();
 		}
 
 		/// <summary>
@@ -142,10 +134,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		{
 			availablePoints = 0;
 			totalPointsEarned = 0;
-			spentPoints = 0;
-			SaveToData();
-		}
-
+			spentPoints = 0
 		/// <summary>
 		/// Static helper: Award passive points to a player
 		/// </summary>

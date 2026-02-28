@@ -71,14 +71,11 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			nodeContainer.Height.Set(-120, 1f);
 			nodeContainer.Top.Set(80, 0f);
 			nodeContainer.Left.Set(10, 0f);
-			nodeContainer.OverflowHidden = true;
+			nodeContainer.OverflowHidden = false; // Allow overflow for large trees
 			background.Append(nodeContainer);
 			
 			// Create nodes and connections
 			CreateNodesAndConnections();
-			
-			// Center the tree view
-			CenterTreeView();
 		}
 
 		private void CreateNodesAndConnections()
@@ -89,11 +86,42 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			if (tree == null)
 				return;
 			
-			// Create node buttons
+			// First pass: find bounds of the tree
+			float minX = float.MaxValue;
+			float maxX = float.MinValue;
+			float minY = float.MaxValue;
+			float maxY = float.MinValue;
+			
+			foreach (var nodePair in tree.Nodes)
+			{
+				PassiveNode node = nodePair.Value;
+				float x = node.PositionX * 80f;
+				float y = node.PositionY * 80f;
+				
+				if (x < minX) minX = x;
+				if (x > maxX) maxX = x;
+				if (y < minY) minY = y;
+				if (y > maxY) maxY = y;
+			}
+			
+			// Calculate centering offset
+			// We want the tree centered in the container with padding
+			const float padding = 100f;
+			float offsetX = padding - minX;
+			float offsetY = padding - minY;
+			
+			// Create node buttons with adjusted positions
 			foreach (var nodePair in tree.Nodes)
 			{
 				PassiveNode node = nodePair.Value;
 				PassiveNodeButton button = new PassiveNodeButton(node, treeId, treeManager);
+				
+				// Override the position with centered offset
+				float centeredX = (node.PositionX * 80f) + offsetX;
+				float centeredY = (node.PositionY * 80f) + offsetY;
+				button.Left.Set(centeredX, 0f);
+				button.Top.Set(centeredY, 0f);
+				
 				nodeButtons.Add(button);
 				nodeContainer.Append(button);
 				
@@ -109,47 +137,6 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 						}
 					}
 				}
-			}
-		}
-
-		private void CenterTreeView()
-		{
-			if (nodeButtons.Count == 0)
-				return;
-			
-			// Calculate bounds of all nodes
-			float minX = float.MaxValue;
-			float maxX = float.MinValue;
-			float minY = float.MaxValue;
-			float maxY = float.MinValue;
-			
-			foreach (var button in nodeButtons)
-			{
-				PassiveNode node = button.GetNode();
-				float x = node.PositionX * 80f;
-				float y = node.PositionY * 80f;
-				
-				if (x < minX) minX = x;
-				if (x > maxX) maxX = x;
-				if (y < minY) minY = y;
-				if (y > maxY) maxY = y;
-			}
-			
-			// Calculate center offset
-			float treeWidth = maxX - minX + 48f;
-			float treeHeight = maxY - minY + 48f;
-			float containerWidth = nodeContainer.GetDimensions().Width;
-			float containerHeight = nodeContainer.GetDimensions().Height;
-			
-			float offsetX = (containerWidth - treeWidth) / 2f - minX;
-			float offsetY = 50f - minY; // Start near top
-			
-			// Apply offset to all nodes
-			foreach (var button in nodeButtons)
-			{
-				button.Left.Set(button.Left.Pixels + offsetX, 0f);
-				button.Top.Set(button.Top.Pixels + offsetY, 0f);
-				button.Recalculate();
 			}
 		}
 
