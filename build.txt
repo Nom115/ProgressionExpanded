@@ -1,0 +1,3 @@
+displayName = Progression Expanded
+author = Nom
+version = 0.1

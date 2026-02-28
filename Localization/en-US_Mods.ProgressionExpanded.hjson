@@ -1,0 +1,88 @@
+Items: {
+	TransmutationCore: {
+		Tooltip: ""
+		DisplayName: Transmutation Core
+	}
+
+	VerdantParadox: {
+		Tooltip: ""
+		DisplayName: Verdant Paradox
+	}
+
+	OrbOfTransmutation: {
+		Tooltip: ""
+		DisplayName: Orb Of Transmutation
+	}
+}
+
+Configs: {
+	ProgressionConfig: {
+		DisplayName: Progression Expanded Config
+
+		Headers: {
+			XPBarSettings: XP Bar Settings
+			LevelDisplaySettings: Level Display Settings
+			HealthBarSettings: Health Bar Settings Header
+		}
+
+		ShowXPBar: {
+			Label: Show XP Bar
+			Tooltip: Enable or disable the XP bar display
+		}
+
+		XPBarX: {
+			Label: XP Bar X Position
+			Tooltip: Horizontal position of the XP bar (pixels from left)
+		}
+
+		XPBarY: {
+			Label: XP Bar Y Position
+			Tooltip: Vertical position of the XP bar (pixels from bottom)
+		}
+
+		XPBarScale: {
+			Label: XP Bar Scale
+			Tooltip: Size multiplier for the XP bar
+		}
+
+		ShowPlayerLevels: {
+			Label: Show Player Levels
+			Tooltip: Show level tags below players
+		}
+
+		ShowNPCLevels: {
+			Label: Show NPC Levels
+			Tooltip: Show level tags above NPCs
+		}
+
+		ShowOnlyWhenHovered: {
+			Label: Show Only When Hovering
+			Tooltip: Only display level tags when hovering over entities
+		}
+
+		ShowCustomHealthBar: {
+			Label: Show Custom Health Bar
+			Tooltip: ""
+		}
+
+		HideVanillaHearts: {
+			Label: Hide Vanilla Hearts
+			Tooltip: ""
+		}
+
+		HealthBarX: {
+			Label: Health Bar X
+			Tooltip: ""
+		}
+
+		HealthBarY: {
+			Label: Health Bar Y
+			Tooltip: ""
+		}
+
+		HealthBarScale: {
+			Label: Health Bar Scale
+			Tooltip: ""
+		}
+	}
+}

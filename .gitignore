@@ -1,0 +1,36 @@
+# Terraria mod files
+*.tmod
+*.tmod.old
+
+# Build outputs
+bin/
+obj/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.cache
+*.csproj.user
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Scripts folder
+.scripts/
+
+# Logs
+*.log
