@@ -19,6 +19,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 		private const float PERCENT_PER_TIER = 0.05f; // 5% per tier
 		private const float DURATION_PER_TIER = 0.5f; // 0.5 seconds per tier
 		private const int MAX_TIER = 4;
+		private const int MAX_INSTANCES = 10; // Backstop cap on concurrent stagger instances
 
 		// Tracking stagger instances
 		private List<StaggerInstance> staggerInstances = new List<StaggerInstance>();
@@ -26,6 +27,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 		private bool isActive = false;
 		private float accumulatedDamage = 0f; // Track fractional damage between ticks
 		private float pendingStaggerPercent = 0f; // Track stagger percent for PostHurt
+		private bool applyingStaggerDamage = false; // Re-entrancy guard for the stagger DoT
 
 		public override void ResetEffects()
 		{
@@ -33,10 +35,42 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			PassiveTreeManager treeManager = Player.GetModPlayer<PassiveTreeManager>();
 			currentTier = treeManager.GetNodeTier("warrior_tree", "stagger_notable");
 			isActive = currentTier > 0;
+
+			// If the notable was deallocated / ranked to 0 while stagger was still ticking, end it
+			// cleanly instead of leaving orphaned instances and a stuck buff running forever.
+			if (!isActive && staggerInstances.Count > 0)
+				ClearStagger();
+		}
+
+		public override void OnRespawn()
+		{
+			// Never carry a runaway stagger across a life.
+			ClearStagger();
+		}
+
+		/// <summary>
+		/// Cancel all in-progress stagger: clear instances, accumulated fractional damage, and the buff.
+		/// </summary>
+		private void ClearStagger()
+		{
+			staggerInstances.Clear();
+			accumulatedDamage = 0f;
+
+			int buffType = ModContent.BuffType<StaggerDebuff>();
+			if (Player.HasBuff(buffType))
+				Player.ClearBuff(buffType);
 		}
 
 		public override void ModifyHurt(ref Player.HurtModifiers modifiers)
 		{
+			// Never stagger our own stagger damage — that feedback loop is what made stagger last
+			// forever. While we deal the DoT via Player.Hurt this flag is set, so bail out.
+			if (applyingStaggerDamage)
+			{
+				pendingStaggerPercent = 0f;
+				return;
+			}
+
 			if (!isActive || currentTier <= 0)
 			{
 				pendingStaggerPercent = 0f;
@@ -52,6 +86,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 
 		public override void PostHurt(Player.HurtInfo info)
 		{
+			// Re-entrancy guard (see ModifyHurt): don't create new stagger from the DoT itself.
+			if (applyingStaggerDamage)
+				return;
+
 			if (!isActive || currentTier <= 0 || pendingStaggerPercent <= 0f)
 				return;
 
@@ -65,8 +103,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			// staggeredDamage = X * staggerPercent = info.Damage * (staggerPercent / (1 - staggerPercent))
 			float staggeredDamage = info.Damage * (pendingStaggerPercent / (1f - pendingStaggerPercent));
 
-			// Only apply if there's damage to stagger
-			if (staggeredDamage > 0)
+			// Backstop: clamp a single instance so a freak hit can't spawn an enormous DoT.
+			// Belt-and-suspenders on top of the re-entrancy guard.
+			if (staggeredDamage > Player.statLifeMax2)
+				staggeredDamage = Player.statLifeMax2;
+
+			// Only apply if there's damage to stagger and we're under the instance cap.
+			if (staggeredDamage > 0 && staggerInstances.Count < MAX_INSTANCES)
 			{
 				// Create a new stagger instance
 				StaggerInstance instance = new StaggerInstance
@@ -146,11 +189,21 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			{
 				int damageToApply = (int)accumulatedDamage;
 				accumulatedDamage -= damageToApply; // Keep the fractional remainder
-				
-				// Apply damage
-				Player.Hurt(Terraria.DataStructures.PlayerDeathReason.ByCustomReason(
-					NetworkText.FromLiteral(Player.name + " was staggered to death.")), 
-					damageToApply, 0, false, false, -1, false, 0);
+
+				// Apply damage. Guard against re-entrancy: Player.Hurt re-enters ModifyHurt/PostHurt
+				// on THIS ModPlayer, so without this flag the stagger DoT would stagger itself and
+				// renew its own duration forever.
+				applyingStaggerDamage = true;
+				try
+				{
+					Player.Hurt(Terraria.DataStructures.PlayerDeathReason.ByCustomReason(
+						NetworkText.FromLiteral(Player.name + " was staggered to death.")),
+						damageToApply, 0, false, false, -1, false, 0);
+				}
+				finally
+				{
+					applyingStaggerDamage = false;
+				}
 			}
 
 			// Remove expired instances

@@ -34,3 +34,6 @@ desktop.ini
 
 # Logs
 *.log
+
+# Claude notes
+CLAUDE.md

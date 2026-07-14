@@ -46,25 +46,6 @@ if (frameCounter > 10 && !Main.gameMenu)
 {
 showWelcomeMessage = false;
 InChatAlerts.Info("World loaded successfully!");
-
-// Testing: Give player bonus health if below 2000
-var player = Main.LocalPlayer;
-if (player != null && player.active)
-{
-var healthManager = player.GetModPlayer<Src.Levels.PlayerSystems.PlayerHealthManager>();
-int currentMaxHP = healthManager.GetTotalMaxHealth();
-
-if (currentMaxHP < 2000)
-{
-int healthToAdd = 2000 - currentMaxHP;
-healthManager.AddBonusHealth(healthToAdd);
-InChatAlerts.Info($"Added {healthToAdd} bonus health! Total HP: {healthManager.GetTotalMaxHealth()}");
-}
-else
-{
-InChatAlerts.Info($"Current max HP: {currentMaxHP}");
-}
-}
 }
 }
 }

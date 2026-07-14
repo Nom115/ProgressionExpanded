@@ -16,42 +16,54 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 		{
 			// Get the NPC level manager to check if this NPC should give XP
 			var npcManager = npc.GetGlobalNPC<NPCLevelManager>();
-			
+
 			if (!npcManager.ShouldGiveXP(npc))
 			{
 				return;
 			}
 
-			// Calculate base XP reward based on NPC level
+			// Calculate base XP reward (flat base + boss/rarity), before the per-player
+			// level-difference scaling.
 			int baseXP = npcManager.CalculateXPReward(npc);
 
-			// Apply rarity and modifier multipliers
+			// Apply rarity and modifier (affix) multipliers
 			var modifierSystem = npc.GetGlobalNPC<EnemyModifierSystem>();
 			float totalMultiplier = modifierSystem.GetTotalXPMultiplier();
-			int finalXP = (int)(baseXP * totalMultiplier);
+			float preScaledXP = baseXP * totalMultiplier;
 
-			if (finalXP <= 0) return;
+			if (preScaledXP <= 0f) return;
 
-			// Award XP to nearby players who likely participated in the kill
-			AwardXPToNearbyPlayers(npc, finalXP);
+			// Award XP to nearby players who likely participated in the kill, scaled per
+			// player by how far this enemy's level sits from their optimal (+5) sweet spot.
+			AwardXPToNearbyPlayers(npc, npcManager, preScaledXP);
 		}
 
 		/// <summary>
-		/// Award XP to all players within a reasonable range who likely participated
+		/// Award XP to all players within a reasonable range who likely participated.
+		/// Each player's reward is scaled by their own level difference from the enemy,
+		/// so killing enemies ~5 levels above you is the most XP-efficient.
 		/// </summary>
-		private void AwardXPToNearbyPlayers(Terraria.NPC npc, int xpReward)
+		private void AwardXPToNearbyPlayers(Terraria.NPC npc, NPCLevelManager npcManager, float preScaledXP)
 		{
 			const float XP_RANGE = 1000f; // Range in pixels to award XP
-			
+
+			int enemyLevel = npcManager.GetLevel(npc);
+
 			for (int i = 0; i < Main.maxPlayers; i++)
 			{
 				Terraria.Player player = Main.player[i];
-				
+
 				// Check if player is active and nearby
 				if (player.active && !player.dead && player.Distance(npc.Center) < XP_RANGE)
 				{
+					int playerLevel = PlayerLevelManager.GetLevel(player);
+					float levelDiffMultiplier = NPCLevelManager.GetLevelDifferenceXPMultiplier(enemyLevel, playerLevel);
+
+					int finalXP = (int)(preScaledXP * levelDiffMultiplier);
+					if (finalXP <= 0) continue;
+
 					// Award XP to player
-					PlayerLevelManager.AddXP(player, xpReward);
+					PlayerLevelManager.AddXP(player, finalXP);
 				}
 			}
 		}
@@ -69,12 +81,18 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			}
 
 			int baseXP = npcManager.CalculateXPReward(npc);
-			
+
 			// Apply rarity and modifier multipliers
 			var modifierSystem = npc.GetGlobalNPC<EnemyModifierSystem>();
 			float totalMultiplier = modifierSystem.GetTotalXPMultiplier();
-			int finalXP = (int)(baseXP * totalMultiplier);
-			
+
+			// Scale by this player's level difference from the enemy (peaks at +5).
+			int playerLevel = PlayerLevelManager.GetLevel(player);
+			int enemyLevel = npcManager.GetLevel(npc);
+			float levelDiffMultiplier = NPCLevelManager.GetLevelDifferenceXPMultiplier(enemyLevel, playerLevel);
+
+			int finalXP = (int)(baseXP * totalMultiplier * levelDiffMultiplier);
+
 			if (finalXP > 0 && player.active && !player.dead)
 			{
 				PlayerLevelManager.AddXP(player, finalXP);

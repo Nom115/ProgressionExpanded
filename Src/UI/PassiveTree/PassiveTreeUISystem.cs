@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;
 using Terraria;
+using Terraria.ID;
 using Terraria.ModLoader;
 using Terraria.UI;
 
@@ -39,9 +40,20 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		public override void UpdateUI(GameTime gameTime)
 		{
+			// Poll the toggle key here (not in a ModPlayer hook) so it still works while the
+			// game is paused: ModPlayer.PostUpdate does not run during pause, but UpdateUI does.
+			if (PassiveTreeKeybind.TogglePassiveTreeKey?.JustPressed == true)
+				ToggleUI();
+
 			if (passiveTreeInterface?.CurrentState != null)
 			{
 				passiveTreeInterface.Update(gameTime);
+
+				// Pause the game while the passives page is open so the player can browse at
+				// their own pace. Reasserted each tick; single-player only (Main.gamePaused has
+				// no effect in multiplayer).
+				if (Main.netMode == NetmodeID.SinglePlayer)
+					Main.gamePaused = true;
 			}
 		}
 
@@ -93,6 +105,10 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		public void CloseUI()
 		{
 			passiveTreeInterface?.SetState(null);
+
+			// Release the pause we asserted while the page was open.
+			if (Main.netMode == NetmodeID.SinglePlayer)
+				Main.gamePaused = false;
 		}
 	}
 }

@@ -1,208 +1,227 @@
 {
   "TreeId": "warrior_tree",
   "TreeName": "Path of the Warrior",
-  "Description": "A balanced tree focusing on physical combat and survivability",
+  "Description": "Socket up to six masteries. Mix raw stats with notable combat procs that mirror the affixes your enemies use against you.",
   "Nodes": {
-    "stagger_notable": {
-      "NodeId": "stagger_notable",
-      "DisplayName": "Stagger",
-      "Description": "Tier 1: 40% of damage taken is dealt over 4s | Tier 2: 45% over 4.5s | Tier 3: 50% over 5s | Tier 4: 55% over 5.5s",
+    "berserker": {
+      "NodeId": "berserker",
+      "DisplayName": "Berserker",
+      "Description": "Hone your melee craft for flat and scaling melee damage.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "MeleeDamage": 2.0 },
+      "PercentBonuses": { "MeleeDamage": 0.03 }
+    },
+    "sharpshooter": {
+      "NodeId": "sharpshooter",
+      "DisplayName": "Sharpshooter",
+      "Description": "Steady your aim for flat and scaling ranged damage.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "RangedDamage": 2.0 },
+      "PercentBonuses": { "RangedDamage": 0.03 }
+    },
+    "arcane_focus": {
+      "NodeId": "arcane_focus",
+      "DisplayName": "Arcane Focus",
+      "Description": "Channel raw magic: more spell damage and cheaper casts.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": { "MagicDamage": 0.03, "ManaEfficiency": 0.02 }
+    },
+    "swarm_commander": {
+      "NodeId": "swarm_commander",
+      "DisplayName": "Swarm Commander",
+      "Description": "Command a larger, deadlier host: an extra minion slot and more summon damage per tier.",
+      "MaxTier": 3,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "MinionSlots": 1.0 },
+      "PercentBonuses": { "SummonDamage": 0.03 }
+    },
+    "warlord": {
+      "NodeId": "warlord",
+      "DisplayName": "Warlord",
+      "Description": "All-round martial prowess: flat and scaling damage of every kind.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "GenericDamage": 3.0 },
+      "PercentBonuses": { "GenericDamage": 0.02 }
+    },
+    "deadly_precision": {
+      "NodeId": "deadly_precision",
+      "DisplayName": "Deadly Precision",
+      "Description": "Find the weak points: increased critical strike chance.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "CritChance": 3.0 },
+      "PercentBonuses": {}
+    },
+    "armor_breaker": {
+      "NodeId": "armor_breaker",
+      "DisplayName": "Armor Breaker",
+      "Description": "Your blows bite through plate: increased armor penetration.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "PositionX": 0,
-      "PositionY": 0,
-      "FlatBonuses": {},
+      "FlatBonuses": { "ArmorPenetration": 4.0 },
       "PercentBonuses": {}
     },
-    "warrior_start": {
-      "NodeId": "warrior_start",
-      "DisplayName": "Combat Training",
-      "Description": "Basic combat training increases your effectiveness in battle",
-      "MaxTier": 3,
-      "PointsPerTier": 1,
-      "Prerequisites": ["stagger_notable"],
-      "PositionX": 0,
-      "PositionY": 1,
-      "FlatBonuses": {
-        "GenericDamage": 2.0,
-        "Defense": 1.0
-      },
-      "PercentBonuses": {}
-    },
-    "melee_focus": {
-      "NodeId": "melee_focus",
-      "DisplayName": "Melee Mastery",
-      "Description": "Enhances melee weapon proficiency",
-      "MaxTier": 5,
-      "PointsPerTier": 1,
-      "Prerequisites": ["warrior_start"],
-      "PositionX": -2,
-      "PositionY": 2,
-      "FlatBonuses": {
-        "MeleeDamage": 3.0
-      },
-      "PercentBonuses": {
-        "MeleeDamage": 0.02
-      }
-    },
-    "ranged_focus": {
-      "NodeId": "ranged_focus",
-      "DisplayName": "Ranged Precision",
-      "Description": "Improves accuracy and damage with ranged weapons",
-      "MaxTier": 5,
-      "PointsPerTier": 1,
-      "Prerequisites": ["warrior_start"],
-      "PositionX": 2,
-      "PositionY": 2,
-      "FlatBonuses": {
-        "RangedDamage": 3.0
-      },
-      "PercentBonuses": {
-        "RangedDamage": 0.02
-      }
-    },
-    "iron_skin": {
-      "NodeId": "iron_skin",
-      "DisplayName": "Iron Skin",
-      "Description": "Your skin hardens, increasing defense",
-      "MaxTier": 3,
-      "PointsPerTier": 1,
-      "Prerequisites": ["warrior_start"],
-      "PositionX": 0,
-      "PositionY": 2,
-      "FlatBonuses": {
-        "Defense": 3.0
-      },
-      "PercentBonuses": {}
-    },
-    "critical_strikes": {
-      "NodeId": "critical_strikes",
-      "DisplayName": "Critical Strikes",
-      "Description": "Increases critical strike chance",
+    "frenzy": {
+      "NodeId": "frenzy",
+      "DisplayName": "Frenzy",
+      "Description": "Attack faster with every weapon type.",
       "MaxTier": 4,
       "PointsPerTier": 1,
-      "Prerequisites": ["melee_focus", "ranged_focus"],
-      "PositionX": 0,
-      "PositionY": 3,
-      "FlatBonuses": {
-        "CritChance": 2.0
-      },
-      "PercentBonuses": {}
-    },
-    "swift_strikes": {
-      "NodeId": "swift_strikes",
-      "DisplayName": "Swift Strikes",
-      "Description": "Attack faster with all weapons",
-      "MaxTier": 3,
-      "PointsPerTier": 1,
-      "Prerequisites": ["melee_focus"],
-      "PositionX": -3,
-      "PositionY": 3,
+      "Prerequisites": [],
       "FlatBonuses": {},
-      "PercentBonuses": {
-        "AttackSpeed": 0.03
-      }
+      "PercentBonuses": { "AttackSpeed": 0.04 }
     },
-    "armor_penetration": {
-      "NodeId": "armor_penetration",
-      "DisplayName": "Armor Breaker",
-      "Description": "Your attacks pierce enemy defenses",
+    "brutal_impact": {
+      "NodeId": "brutal_impact",
+      "DisplayName": "Brutal Impact",
+      "Description": "Send enemies flying with heavier knockback.",
       "MaxTier": 3,
       "PointsPerTier": 1,
-      "Prerequisites": ["critical_strikes"],
-      "PositionX": 0,
-      "PositionY": 4,
-      "FlatBonuses": {
-        "ArmorPenetration": 3.0
-      },
-      "PercentBonuses": {}
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": { "Knockback": 0.06 }
     },
-    "vitality_boost": {
-      "NodeId": "vitality_boost",
-      "DisplayName": "Vitality",
-      "Description": "Increases maximum health",
+    "ironhide": {
+      "NodeId": "ironhide",
+      "DisplayName": "Ironhide",
+      "Description": "Toughen your hide for extra defense.",
       "MaxTier": 5,
       "PointsPerTier": 1,
-      "Prerequisites": ["iron_skin"],
-      "PositionX": -1,
-      "PositionY": 3,
-      "FlatBonuses": {},
+      "Prerequisites": [],
+      "FlatBonuses": { "Defense": 4.0 },
       "PercentBonuses": {}
     },
-    "regeneration": {
-      "NodeId": "regeneration",
-      "DisplayName": "Regeneration",
-      "Description": "Heal faster over time",
-      "MaxTier": 3,
+    "juggernaut": {
+      "NodeId": "juggernaut",
+      "DisplayName": "Juggernaut",
+      "Description": "Become an unstoppable wall of health: +20 max HP per tier.",
+      "MaxTier": 5,
       "PointsPerTier": 1,
-      "Prerequisites": ["iron_skin"],
-      "PositionX": 1,
-      "PositionY": 3,
-      "FlatBonuses": {
-        "LifeRegen": 2.0
-      },
+      "Prerequisites": [],
+      "FlatBonuses": { "MaxHealth": 20.0 },
       "PercentBonuses": {}
     },
-    "endurance": {
-      "NodeId": "endurance",
-      "DisplayName": "Endurance",
-      "Description": "Reduces damage taken",
-      "MaxTier": 3,
+    "stoneskin": {
+      "NodeId": "stoneskin",
+      "DisplayName": "Stoneskin",
+      "Description": "Shrug off blows with percentage damage reduction.",
+      "MaxTier": 4,
       "PointsPerTier": 1,
-      "Prerequisites": ["vitality_boost", "regeneration"],
-      "PositionX": 0,
-      "PositionY": 4,
+      "Prerequisites": [],
       "FlatBonuses": {},
-      "PercentBonuses": {
-        "Endurance": 0.02
-      }
+      "PercentBonuses": { "Endurance": 0.02 }
     },
-    "movement_speed": {
-      "NodeId": "movement_speed",
+    "second_wind": {
+      "NodeId": "second_wind",
+      "DisplayName": "Second Wind",
+      "Description": "Recover faster: increased natural life regeneration.",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": { "LifeRegen": 2.0 },
+      "PercentBonuses": {}
+    },
+    "fleet_footed": {
+      "NodeId": "fleet_footed",
       "DisplayName": "Fleet Footed",
-      "Description": "Move faster in combat",
-      "MaxTier": 3,
+      "Description": "Move faster in and out of combat.",
+      "MaxTier": 4,
       "PointsPerTier": 1,
-      "Prerequisites": ["swift_strikes"],
-      "PositionX": -3,
-      "PositionY": 4,
+      "Prerequisites": [],
       "FlatBonuses": {},
-      "PercentBonuses": {
-        "MovementSpeed": 0.03
-      }
+      "PercentBonuses": { "MovementSpeed": 0.04 }
     },
-    "knockback_power": {
-      "NodeId": "knockback_power",
-      "DisplayName": "Knockback Power",
-      "Description": "Your attacks knock enemies back further",
-      "MaxTier": 2,
+    "stagger_notable": {
+      "NodeId": "stagger_notable",
+      "DisplayName": "Stagger",
+      "Description": "Notable: a portion of damage you take is redirected into a damage-over-time bleed instead of hitting all at once. Tier 1: 40% over 4s | Tier 2: 45% over 4.5s | Tier 3: 50% over 5s | Tier 4: 55% over 5.5s",
+      "MaxTier": 4,
       "PointsPerTier": 1,
-      "Prerequisites": ["ranged_focus"],
-      "PositionX": 3,
-      "PositionY": 3,
+      "Prerequisites": [],
       "FlatBonuses": {},
-      "PercentBonuses": {
-        "Knockback": 0.05
-      }
+      "PercentBonuses": {}
     },
-    "battle_master": {
-      "NodeId": "battle_master",
-      "DisplayName": "Battle Master",
-      "Description": "The pinnacle of warrior training",
-      "MaxTier": 1,
-      "PointsPerTier": 2,
-      "Prerequisites": ["armor_penetration", "endurance"],
-      "PositionX": 0,
-      "PositionY": 5,
-      "FlatBonuses": {
-        "GenericDamage": 10.0,
-        "Defense": 5.0
-      },
-      "PercentBonuses": {
-        "GenericDamage": 0.05,
-        "Endurance": 0.03
-      }
+    "rend_notable": {
+      "NodeId": "rend_notable",
+      "DisplayName": "Rend",
+      "Description": "Notable: your hits inflict Bleeding. Duration 3s, +1s per tier (up to 6s).",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "immolation_notable": {
+      "NodeId": "immolation_notable",
+      "DisplayName": "Immolation",
+      "Description": "Notable: your hits set enemies On Fire. Duration 3s, +1s per tier (up to 6s).",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "venom_notable": {
+      "NodeId": "venom_notable",
+      "DisplayName": "Venom",
+      "Description": "Notable: your hits inflict Venom, a potent poison. Duration 2s, +0.75s per tier.",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "frostbite_notable": {
+      "NodeId": "frostbite_notable",
+      "DisplayName": "Frostbite",
+      "Description": "Notable: your hits inflict Frostburn. Duration 3s, +1s per tier (up to 6s).",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "shock_notable": {
+      "NodeId": "shock_notable",
+      "DisplayName": "Shock",
+      "Description": "Notable: your hits inflict Electrified. Duration 2s, +0.75s per tier.",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "bloodthirst_notable": {
+      "NodeId": "bloodthirst_notable",
+      "DisplayName": "Bloodthirst",
+      "Description": "Notable: landing a hit heals you for (2 + tier) HP, a few times per second.",
+      "MaxTier": 4,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
+    },
+    "detonate_notable": {
+      "NodeId": "detonate_notable",
+      "DisplayName": "Detonate",
+      "Description": "Notable: killing an enemy detonates it, dealing (20 + 15 x tier) damage to nearby foes in a growing radius.",
+      "MaxTier": 5,
+      "PointsPerTier": 1,
+      "Prerequisites": [],
+      "FlatBonuses": {},
+      "PercentBonuses": {}
     }
   }
 }

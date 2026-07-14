@@ -35,6 +35,17 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 		{
 			if (modifiersInitialized) return;
 
+			// Pinnacle first encounter (works for vanilla AND modded bosses): leave the boss
+			// completely untouched — no rarity stat changes, no affix modifiers.
+			if (BossProgressionTracker.IsPinnacleEncounter(npc))
+			{
+				rarity = EnemyRarity.Common;
+				modifiers = new List<IModifier>();
+				GenerateDisplayName(npc, EnemyRarityConfig.GetRarityInfo(rarity));
+				modifiersInitialized = true;
+				return;
+			}
+
 			// Roll rarity
 			rarity = EnemyRarityConfig.RollRarity();
 			var rarityInfo = EnemyRarityConfig.GetRarityInfo(rarity);
@@ -42,27 +53,16 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			// Apply rarity stat multipliers
 			ApplyRarityStats(npc, rarityInfo);
 
-			// Special boss modifier logic
+			// Bosses that have already been defeated at least once always get 2-5 modifiers.
 			if (npc.boss)
-			{bool isBossDefeated = IsBossAlreadyDefeated(npc.type);
-				
-				// First kill of this specific boss - no modifiers
-				if (!isBossDefeated)
-				{
-					// No modifiers for first kill of this boss
-					modifiers = new List<IModifier>();
-				}
-				// Subsequent kills of this boss - 2-5 modifiers
-				else
-				{
-					int modifierCount = Main.rand.Next(2, 6); // 2-5 modifiers
-					modifiers = ModifierPool.RollModifiers(modifierCount, npc);
+			{
+				int modifierCount = Main.rand.Next(2, 6); // 2-5 modifiers
+				modifiers = ModifierPool.RollModifiers(modifierCount, npc);
 
-					// Apply each modifier
-					foreach (var modifier in modifiers)
-					{
-						modifier.Apply(npc);
-					}
+				// Apply each modifier
+				foreach (var modifier in modifiers)
+				{
+					modifier.Apply(npc);
 				}
 			}
 			// Normal enemies - use rarity-based modifiers
@@ -85,26 +85,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 		}
 
 		#endregion
-/// <summary>
-		/// Check if a specific boss has been defeated before
-		/// </summary>
-		private bool IsBossAlreadyDefeated(int npcType)
-		{
-			return npcType switch
-			{
-				NPCID.KingSlime => BossKillTracker.DownedKingSlime,
-				NPCID.EyeofCthulhu => BossKillTracker.DownedEyeOfCthulhu,
-				NPCID.EaterofWorldsHead or NPCID.EaterofWorldsBody or NPCID.EaterofWorldsTail => BossKillTracker.DownedEvilBoss,
-				NPCID.BrainofCthulhu => BossKillTracker.DownedEvilBoss,
-				NPCID.QueenBee => BossKillTracker.DownedQueenBee,
-				NPCID.SkeletronHead => BossKillTracker.DownedSkeletron,
-				NPCID.Deerclops => BossKillTracker.DownedDeerclops,
-				NPCID.WallofFlesh or NPCID.WallofFleshEye => BossKillTracker.DownedWallOfFlesh,
-				_ => false // Unknown boss or not tracked
-			};
-		}
 
-		
 		#region Rarity & Stats
 
 		private void ApplyRarityStats(Terraria.NPC npc, RarityInfo rarityInfo)

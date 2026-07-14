@@ -22,7 +22,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		private UIPanel tabContainer;
 		private UIElement contentArea;
 		
-		private Dictionary<string, PassiveTreePanel> treePanels = new Dictionary<string, PassiveTreePanel>();
+		private Dictionary<string, MasteryLoadoutPanel> treePanels = new Dictionary<string, MasteryLoadoutPanel>();
 		private Dictionary<string, TreeTabButton> tabButtons = new Dictionary<string, TreeTabButton>();
 		private string currentTreeId;
 		
@@ -117,110 +117,67 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		public override void OnActivate()
 		{
 			base.OnActivate();
-			Mod.Logger.Info("[PassiveTreeUI] OnActivate called");
-			Main.NewText("[DEBUG] OnActivate called", Color.Cyan);
-			
-			// Don't check player state during mod loading
+
+			// Don't check player state during mod loading.
 			if (Main.LocalPlayer == null || !Main.LocalPlayer.active)
-			{
-				Mod.Logger.Info("[PassiveTreeUI] Player null or inactive, returning");
-				Main.NewText("[DEBUG] Player null/inactive", Color.Red);
 				return;
-			}
-			
-			// Ensure class selection panel is initialized
+
+			// Ensure the class selection panel exists.
 			if (classSelectionPanel == null)
 			{
 				classSelectionPanel = new ClassSelectionPanel();
 				classSelectionPanel.OnClassSelected += OnClassSelected;
-				Mod.Logger.Info("[PassiveTreeUI] Created new classSelectionPanel");
 			}
-			
-			// Check if player has selected a class
+
+			// Show class selection or the tree depending on whether a class is chosen.
 			ClassSelectionManager.PlayerClass selectedClass = ClassSelectionManager.GetSelectedClass(Main.LocalPlayer);
-			Mod.Logger.Info($"[PassiveTreeUI] Selected class: {selectedClass}");
-			Main.NewText($"[DEBUG] Selected class: {selectedClass}", Color.Yellow);
-			
 			if (selectedClass == ClassSelectionManager.PlayerClass.None)
-			{
-				Mod.Logger.Info("[PassiveTreeUI] No class selected, showing class selection");
-				Main.NewText("[DEBUG] Showing class selection", Color.Orange);
 				ShowClassSelection();
-			}
 			else
-			{
-				// Always load the tree when we have a class
-				Mod.Logger.Info($"[PassiveTreeUI] Class selected: {selectedClass}, showing tree");
-				Main.NewText($"[DEBUG] Showing tree for {selectedClass}", Color.Lime);
 				ShowPassiveTree();
-			}
 		}
 
 		private void ShowClassSelection()
 		{
-			Mod.Logger.Info("[PassiveTreeUI] ShowClassSelection called");
-			Main.NewText("[DEBUG] ShowClassSelection called", Color.Magenta);
-			
-			// Clear content area and reset tree ID
+			// Clear content area and reset tree ID.
 			contentArea.RemoveAllChildren();
 			currentTreeId = null;
-			Mod.Logger.Info("[PassiveTreeUI] Cleared content area and reset currentTreeId");
-			
-			// Hide buttons
+
+			// Hide tree-only buttons and tabs.
 			if (headerPanel.HasChild(resetButton))
 				resetButton.Remove();
 			if (headerPanel.HasChild(respecButton))
 				respecButton.Remove();
 			if (mainContainer.HasChild(tabContainer))
 				tabContainer.Remove();
-			
-			// Reinitialize class selection panel to ensure it's fresh
+
+			// Fresh class selection panel.
 			classSelectionPanel = new ClassSelectionPanel();
 			classSelectionPanel.OnClassSelected += OnClassSelected;
 			classSelectionPanel.Activate();
-			Mod.Logger.Info("[PassiveTreeUI] Created and activated classSelectionPanel");
-			
-			// Show class selection
+
 			contentArea.Append(classSelectionPanel);
 			showingClassSelection = true;
 			titleText.SetText("Choose Your Path");
-			Mod.Logger.Info("[PassiveTreeUI] Appended classSelectionPanel to contentArea");
-			Main.NewText("[DEBUG] Class selection panel added", Color.Magenta);
 		}
 
 		private void ShowPassiveTree()
 		{
-			Mod.Logger.Info("[PassiveTreeUI] ShowPassiveTree called");
-			Main.NewText("[DEBUG] ShowPassiveTree called", Color.Lime);
-			
-			// Clear content area and reset tree ID
+			// Clear content area and reset tree ID.
 			contentArea.RemoveAllChildren();
 			currentTreeId = null;
-			Mod.Logger.Info("[PassiveTreeUI] Cleared content area and reset currentTreeId");
-			
-			// Show buttons and tabs
+
+			// Show tree buttons and tabs.
 			if (!headerPanel.HasChild(resetButton))
-			{
 				headerPanel.Append(resetButton);
-				Mod.Logger.Info("[PassiveTreeUI] Appended resetButton");
-			}
 			if (!headerPanel.HasChild(respecButton))
-			{
 				headerPanel.Append(respecButton);
-				Mod.Logger.Info("[PassiveTreeUI] Appended respecButton");
-			}
 			if (!mainContainer.HasChild(tabContainer))
-			{
 				mainContainer.Append(tabContainer);
-				Mod.Logger.Info("[PassiveTreeUI] Appended tabContainer");
-			}
-			
+
 			showingClassSelection = false;
 			titleText.SetText("Passive Skill Tree");
-			Mod.Logger.Info("[PassiveTreeUI] Set title and flags");
-			
-			// Load the tree for selected class
-			Main.NewText("[DEBUG] About to call LoadSelectedClassTree", Color.Yellow);
+
 			LoadSelectedClassTree();
 		}
 
@@ -235,81 +192,53 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		private void LoadSelectedClassTree()
 		{
-			Mod.Logger.Info("[PassiveTreeUI] LoadSelectedClassTree called");
-			Main.NewText("[DEBUG] LoadSelectedClassTree called", Color.Cyan);
-			
-			// Clear existing
+			// Clear existing panels/tabs.
 			treePanels.Clear();
 			tabButtons.Clear();
 			tabContainer.RemoveAllChildren();
-			Mod.Logger.Info("[PassiveTreeUI] Cleared existing panels and tabs");
-			
-			// Get tree for selected class
+
+			// Resolve the tree for the selected class.
 			ClassSelectionManager.PlayerClass selectedClass = ClassSelectionManager.GetSelectedClass(Main.LocalPlayer);
-			Mod.Logger.Info($"[PassiveTreeUI] Selected class from manager: {selectedClass}");
-			Main.NewText($"[DEBUG] Got class: {selectedClass}", Color.Yellow);
-			
 			string treeId = ClassSelectionManager.GetTreeIdForClass(selectedClass);
-			Mod.Logger.Info($"[PassiveTreeUI] Tree ID for class: {treeId}");
-			Main.NewText($"[DEBUG] Tree ID: {treeId}", Color.Yellow);
-			
+
 			if (string.IsNullOrEmpty(treeId))
 			{
-				Mod.Logger.Error("[PassiveTreeUI] Tree ID is null or empty!");
-				UIText errorText = new UIText("No tree found for selected class!", 1.2f);
-				errorText.HAlign = 0.5f;
-				errorText.VAlign = 0.5f;
-				errorText.TextColor = Color.Red;
-				contentArea.Append(errorText);
-				Main.NewText("Error: No tree ID for class " + selectedClass, Color.Red);
+				ShowContentError($"No tree found for class {selectedClass}.");
 				return;
 			}
-			
+
 			PassiveTreeType tree = PassiveTreeLoader.GetTree(treeId);
-			Mod.Logger.Info($"[PassiveTreeUI] Loaded tree: {(tree != null ? tree.TreeName : "NULL")}");
-			Main.NewText($"[DEBUG] Tree loaded: {(tree != null ? tree.TreeName : "NULL")}", Color.Yellow);
-			
 			if (tree == null)
 			{
-				Mod.Logger.Error($"[PassiveTreeUI] Failed to load tree '{treeId}'");
-				UIText errorText = new UIText($"Tree '{treeId}' not found!", 1.2f);
-				errorText.HAlign = 0.5f;
-				errorText.VAlign = 0.5f;
-				errorText.TextColor = Color.Red;
-				contentArea.Append(errorText);
-				Main.NewText($"Error: Tree '{treeId}' not loaded", Color.Red);
+				Mod.Logger.Error($"[PassiveTree] Tree '{treeId}' is not loaded.");
+				ShowContentError($"Tree '{treeId}' not found!");
 				return;
 			}
-			
-			// Create tab button
-			Mod.Logger.Info($"[PassiveTreeUI] Creating tab button for '{tree.TreeName}'");
+
+			// Tab button for this tree.
 			TreeTabButton tabButton = new TreeTabButton(tree.TreeName, treeId);
 			tabButton.Left.Set(10, 0f);
 			tabButton.VAlign = 0.5f;
 			tabButton.OnLeftClick += (evt, element) => SwitchToTree(treeId);
 			tabContainer.Append(tabButton);
 			tabButtons[treeId] = tabButton;
-			Mod.Logger.Info($"[PassiveTreeUI] Tab button created and appended");
-			Main.NewText("[DEBUG] Tab button created", Color.Lime);
-			
-			// Create tree panel
-			Mod.Logger.Info($"[PassiveTreeUI] Creating PassiveTreePanel for '{treeId}'");
-			PassiveTreePanel panel = new PassiveTreePanel(treeId);
-			panel.Activate(); // Ensure panel is activated
+
+			// Mastery loadout panel for this tree.
+			MasteryLoadoutPanel panel = new MasteryLoadoutPanel(treeId);
+			panel.Activate();
 			treePanels[treeId] = panel;
-			Mod.Logger.Info($"[PassiveTreeUI] Panel created and stored");
-			Main.NewText("[DEBUG] Panel created", Color.Lime);
-			
-			// Show the tree
-			Mod.Logger.Info($"[PassiveTreeUI] About to call SwitchToTree");
-			Main.NewText("[DEBUG] Calling SwitchToTree", Color.Cyan);
+
 			SwitchToTree(treeId);
-			
-			// Force recalculation
-			Mod.Logger.Info($"[PassiveTreeUI] Calling Recalculate");
 			Recalculate();
-			Mod.Logger.Info($"[PassiveTreeUI] LoadSelectedClassTree completed");
-			Main.NewText("[DEBUG] LoadSelectedClassTree complete", Color.Lime);
+		}
+
+		private void ShowContentError(string message)
+		{
+			UIText errorText = new UIText(message, 1.2f);
+			errorText.HAlign = 0.5f;
+			errorText.VAlign = 0.5f;
+			errorText.TextColor = Color.Red;
+			contentArea.Append(errorText);
 		}
 
 		private void ResetCurrentTree()
@@ -319,8 +248,6 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			
 			// Get tree manager and reset
 			PassiveTreeManager manager = Main.LocalPlayer.GetModPlayer<PassiveTreeManager>();
-			PassivePointManager pointManager = Main.LocalPlayer.GetModPlayer<PassivePointManager>();
-			
 			manager.ResetTree(currentTreeId);
 			
 			// Refresh UI
@@ -349,51 +276,25 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		private void SwitchToTree(string treeId)
 		{
-			Mod.Logger.Info($"[PassiveTreeUI] SwitchToTree called with treeId: {treeId}, currentTreeId: {currentTreeId}");
-			Main.NewText($"[DEBUG] SwitchToTree: {treeId}", Color.Magenta);
-			
 			if (currentTreeId == treeId)
-			{
-				Mod.Logger.Info($"[PassiveTreeUI] Already showing this tree, returning");
 				return;
-			}
-			
-			// Hide current panel
+
+			// Hide the current panel and deactivate its tab.
 			if (!string.IsNullOrEmpty(currentTreeId) && treePanels.ContainsKey(currentTreeId))
 			{
 				contentArea.RemoveChild(treePanels[currentTreeId]);
-				Mod.Logger.Info($"[PassiveTreeUI] Removed previous panel: {currentTreeId}");
-				
-				// Deactivate tab
 				if (tabButtons.ContainsKey(currentTreeId))
 					tabButtons[currentTreeId].SetActive(false);
 			}
-			
-			// Show new panel
+
+			// Show the new panel and activate its tab.
 			currentTreeId = treeId;
-			Mod.Logger.Info($"[PassiveTreeUI] treePanels contains '{treeId}': {treePanels.ContainsKey(treeId)}");
-			Main.NewText($"[DEBUG] Panel exists: {treePanels.ContainsKey(treeId)}", Color.Yellow);
-			
 			if (treePanels.ContainsKey(treeId))
 			{
-				Mod.Logger.Info($"[PassiveTreeUI] Appending panel to contentArea");
 				contentArea.Append(treePanels[treeId]);
-				Mod.Logger.Info($"[PassiveTreeUI] Panel appended successfully");
-				Main.NewText($"[DEBUG] Panel appended!", Color.Lime);
-				
-				// Activate tab
 				if (tabButtons.ContainsKey(treeId))
-				{
 					tabButtons[treeId].SetActive(true);
-					Mod.Logger.Info($"[PassiveTreeUI] Tab activated");
-				}
 			}
-			else
-			{
-				Mod.Logger.Error($"[PassiveTreeUI] Panel not found in treePanels dictionary!");
-				Main.NewText($"[DEBUG ERROR] Panel not in dictionary!", Color.Red);
-			}
-			Mod.Logger.Info($"[PassiveTreeUI] SwitchToTree completed");
 		}
 
 		public void Close()

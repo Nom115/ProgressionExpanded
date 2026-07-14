@@ -3,7 +3,6 @@ using Terraria;
 using Terraria.ModLoader;
 using ProgressionExpanded.Utils.DataManagers;
 using Newtonsoft.Json;
-using Microsoft.Xna.Framework;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 {
@@ -26,11 +25,30 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 		{
 			LoadAllocations();
 			RecalculateBonuses();
-			initialized = true;
+			// tModLoader runs Initialize() BEFORE LoadData(), so the load above reads an empty
+			// PlayerDataManager (allocations come back as "{}"). Re-read authoritatively on the
+			// first PostUpdateMiscEffects tick (after LoadData has populated PlayerDataManager);
+			// otherwise the next SaveAllocations() would overwrite the real save with the empty
+			// set. Same deferred-read pattern as PlayerHealthManager.
+			initialized = false;
 		}
 
 		public override void PostUpdateMiscEffects()
 		{
+			if (!initialized)
+			{
+				LoadAllocations();
+				RecalculateBonuses();
+
+				// By the first update tick, PassivePointManager.LoadData and PlayerDataManager.LoadData
+				// have both run, so reconcile the point economy against the real allocations. This
+				// self-heals any spent/available drift (e.g. a corrupted allocation save that reset the
+				// tree but not the spent counter).
+				Player.GetModPlayer<PassivePointManager>().ReconcileSpentPoints(GetTotalSpentAcrossTrees());
+
+				initialized = true;
+			}
+
 			// Apply cached bonuses to stats
 			ApplyBonusesToStats();
 		}
@@ -166,49 +184,24 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			// Calculate total points to refund from all trees
 			int totalRefund = 0;
 			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
-			
-			// Debug: Show current state
-			Main.NewText($"Before reset - Available: {pointManager.GetAvailablePoints()}, Spent: {pointManager.GetSpentPoints()}", Color.Cyan);
-			
-			// Create a copy of the keys to avoid collection modification issues
-			List<string> treeIds = new List<string>(treeAllocations.Keys);
-			
-			foreach (var treeId in treeIds)
-			{
-				if (!treeAllocations.ContainsKey(treeId))
-					continue;
-					
-				PassiveTree tree = PassiveTreeLoader.GetTree(treeId);
-				if (tree == null)
-				{
-					Main.NewText($"Warning: Tree '{treeId}' not found!", Color.Orange);
-					continue;
-				}
 
-				foreach (var allocation in treeAllocations[treeId])
+			foreach (var treeEntry in treeAllocations)
+			{
+				PassiveTree tree = PassiveTreeLoader.GetTree(treeEntry.Key);
+				if (tree == null)
+					continue;
+
+				foreach (var allocation in treeEntry.Value)
 				{
 					PassiveNode node = tree.GetNode(allocation.Key);
 					if (node != null)
-					{
-						int nodeCost = node.GetTotalPointCost(allocation.Value);
-						totalRefund += nodeCost;
-						Main.NewText($"  Node {allocation.Key} tier {allocation.Value} = {nodeCost} points", Color.LightBlue);
-					}
+						totalRefund += node.GetTotalPointCost(allocation.Value);
 				}
 			}
 
-			Main.NewText($"Total refund calculated: {totalRefund} points", Color.Yellow);
-
 			// Refund points
 			if (totalRefund > 0)
-			{
 				pointManager.RefundPoints(totalRefund);
-				Main.NewText($"After refund - Available: {pointManager.GetAvailablePoints()}, Spent: {pointManager.GetSpentPoints()}", Color.Lime);
-			}
-			else
-			{
-				Main.NewText("No points to refund!", Color.Red);
-			}
 
 			// Clear all allocations
 			treeAllocations.Clear();
@@ -228,6 +221,30 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 				return 0;
 
 			return treeAllocations[treeId][nodeId];
+		}
+
+		/// <summary>
+		/// Sum the point cost of every allocated node across all trees. Used on load to reconcile
+		/// PassivePointManager's spent/available totals against the true allocations. Nodes or trees
+		/// missing from the loaded defs are skipped (their cost is unknowable).
+		/// </summary>
+		public int GetTotalSpentAcrossTrees()
+		{
+			int total = 0;
+			foreach (var treeEntry in treeAllocations)
+			{
+				PassiveTree tree = PassiveTreeLoader.GetTree(treeEntry.Key);
+				if (tree == null)
+					continue;
+
+				foreach (var allocation in treeEntry.Value)
+				{
+					PassiveNode node = tree.GetNode(allocation.Key);
+					if (node != null)
+						total += node.GetTotalPointCost(allocation.Value);
+				}
+			}
+			return total;
 		}
 
 		/// <summary>
@@ -259,6 +276,138 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
 			return pointManager.HasEnoughPoints(node.GetUpgradeCost(currentTier));
+		}
+
+		#endregion
+
+		#region Mastery Loadout
+
+		// The mastery-loadout view (MasteryLoadoutPanel) uses these instead of the tree-style
+		// AllocateNode/DeallocateNode above: masteries are gated by a fixed number of slots and the
+		// shared point pool, NOT by a prerequisite web. Prerequisites in the JSON are ignored here.
+
+		/// <summary>
+		/// Number of masteries a player can have socketed at once.
+		/// </summary>
+		public const int MasterySlotCount = 6;
+
+		/// <summary>
+		/// Number of masteries currently socketed (allocated at tier &gt; 0) in a tree.
+		/// </summary>
+		public int GetSocketedCount(string treeId)
+		{
+			if (!treeAllocations.ContainsKey(treeId))
+				return 0;
+
+			int count = 0;
+			foreach (var entry in treeAllocations[treeId])
+			{
+				if (entry.Value > 0)
+					count++;
+			}
+			return count;
+		}
+
+		/// <summary>
+		/// Whether there is a free mastery slot to socket a new mastery into.
+		/// </summary>
+		public bool CanSocketNew(string treeId)
+		{
+			return GetSocketedCount(treeId) < MasterySlotCount;
+		}
+
+		/// <summary>
+		/// Socket a mastery (if not already socketed) or rank it up one tier. Ignores prerequisites.
+		/// Socketing a new mastery requires a free slot; ranking an existing one does not.
+		/// </summary>
+		public bool AllocateMastery(string treeId, string nodeId)
+		{
+			PassiveTree tree = PassiveTreeLoader.GetTree(treeId);
+			if (tree == null)
+				return false;
+
+			PassiveNode node = tree.GetNode(nodeId);
+			if (node == null)
+				return false;
+
+			int currentTier = GetNodeTier(treeId, nodeId);
+
+			// Already maxed.
+			if (currentTier >= node.MaxTier)
+				return false;
+
+			// Socketing a brand-new mastery requires a free slot.
+			if (currentTier == 0 && !CanSocketNew(treeId))
+				return false;
+
+			// Spend the points.
+			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
+			int cost = node.GetUpgradeCost(currentTier);
+			if (!pointManager.SpendPoints(cost))
+				return false;
+
+			if (!treeAllocations.ContainsKey(treeId))
+				treeAllocations[treeId] = new Dictionary<string, int>();
+
+			treeAllocations[treeId][nodeId] = currentTier + 1;
+
+			SaveAllocations();
+			RecalculateBonuses();
+			return true;
+		}
+
+		/// <summary>
+		/// Rank a socketed mastery down one tier (refunding a point); unsockets it at tier 0.
+		/// Ignores dependent-node checks — the loadout has no prerequisite web.
+		/// </summary>
+		public bool DeallocateMastery(string treeId, string nodeId)
+		{
+			PassiveTree tree = PassiveTreeLoader.GetTree(treeId);
+			if (tree == null)
+				return false;
+
+			PassiveNode node = tree.GetNode(nodeId);
+			if (node == null)
+				return false;
+
+			int currentTier = GetNodeTier(treeId, nodeId);
+			if (currentTier <= 0)
+				return false;
+
+			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
+			pointManager.RefundPoints(node.PointsPerTier);
+
+			treeAllocations[treeId][nodeId] = currentTier - 1;
+			if (treeAllocations[treeId][nodeId] <= 0)
+				treeAllocations[treeId].Remove(nodeId);
+
+			SaveAllocations();
+			RecalculateBonuses();
+			return true;
+		}
+
+		/// <summary>
+		/// Fully unsocket a mastery, refunding every point invested in it and freeing the slot.
+		/// </summary>
+		public void ClearMastery(string treeId, string nodeId)
+		{
+			int currentTier = GetNodeTier(treeId, nodeId);
+			if (currentTier <= 0)
+				return;
+
+			PassiveTree tree = PassiveTreeLoader.GetTree(treeId);
+			PassiveNode node = tree?.GetNode(nodeId);
+			if (node != null)
+			{
+				PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
+				pointManager.RefundPoints(node.GetTotalPointCost(currentTier));
+			}
+
+			if (treeAllocations.ContainsKey(treeId))
+				treeAllocations[treeId].Remove(nodeId);
+
+			SaveAllocations();
+			RecalculateBonuses();
 		}
 
 		#endregion
@@ -370,6 +519,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 				// Defence stats
 				case "Defense":
 					Player.statDefense += (int)value;
+					break;
+				case "MaxHealth":
+					// Applied every PostUpdateMiscEffects, mirroring PlayerHealthManager's bonus HP.
+					Player.statLifeMax2 += (int)value;
 					break;
 				case "LifeRegen":
 					Player.lifeRegen += (int)value;

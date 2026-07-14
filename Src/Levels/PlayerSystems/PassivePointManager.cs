@@ -1,12 +1,11 @@
 using Terraria;
 using Terraria.ModLoader;
-using ProgressionExpanded.Utils.DataManagers;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems
 {
 	/// <summary>
-	/// Manages passive points that players earn on level up
-	/// Passive points can be spent to permanently increase stats
+	/// Manages passive points that players earn on level up.
+	/// Passive points can be spent to permanently increase stats via the passive tree.
 	/// </summary>
 	public class PassivePointManager : ModPlayer
 	{
@@ -23,9 +22,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			availablePoints = 0;
 			totalPointsEarned = 0;
 			spentPoints = 0;
-			initialized = true;
 		}
 
+		// Points are stored directly in this ModPlayer's own TagCompound, so LoadData
+		// populates the fields straight from the save. There is no Initialize-before-LoadData
+		// hazard here (unlike managers that read PlayerDataManager in Initialize), so no
+		// deferred read is needed and SaveData is invoked automatically by tModLoader.
 		public override void SaveData(Terraria.ModLoader.IO.TagCompound tag)
 		{
 			tag[AVAILABLE_POINTS_KEY] = availablePoints;
@@ -37,10 +39,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		{
 			availablePoints = tag.GetInt(AVAILABLE_POINTS_KEY);
 			totalPointsEarned = tag.GetInt(TOTAL_POINTS_KEY);
-			spentPoints = tag.GetInt(SPENT_POINTS_KEY
+			spentPoints = tag.GetInt(SPENT_POINTS_KEY);
+		}
 
 		/// <summary>
-		/// Get the number of available (unspent) passive points
+		/// Get the number of available (unspent) passive points.
 		/// </summary>
 		public int GetAvailablePoints()
 		{
@@ -48,7 +51,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Get the total number of passive points earned (spent + available)
+		/// Get the total number of passive points earned (spent + available).
 		/// </summary>
 		public int GetTotalPointsEarned()
 		{
@@ -56,7 +59,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Get the number of spent passive points
+		/// Get the number of spent passive points.
 		/// </summary>
 		public int GetSpentPoints()
 		{
@@ -64,9 +67,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Award passive points to the player (called on level up)
+		/// Award passive points to the player (called on level up).
 		/// </summary>
-		/// <param name="amount">Number of points to award</param>
+		/// <param name="amount">Number of points to award.</param>
 		public void AwardPoints(int amount)
 		{
 			if (amount <= 0)
@@ -74,13 +77,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 			availablePoints += amount;
 			totalPointsEarned += amount;
-			SaveToData();
 		}
 
 		/// <summary>
-		/// Spend passive points (returns true if successful)
+		/// Spend passive points.
 		/// </summary>
-		/// <returns>True if the player had enough points to spend</returns>
+		/// <returns>True if the player had enough points to spend.</returns>
 		public bool SpendPoints(int amount)
 		{
 			if (amount <= 0)
@@ -91,11 +93,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 			availablePoints -= amount;
 			spentPoints += amount;
-			SaveToData();
-			
+			return true;
+		}
 
 		/// <summary>
-		/// Check if the player has enough points to spend
+		/// Check if the player has enough points to spend.
 		/// </summary>
 		public bool HasEnoughPoints(int amount)
 		{
@@ -103,9 +105,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Refund passive points (for respec functionality)
+		/// Refund passive points (for deallocation / respec functionality).
 		/// </summary>
-		/// <param name="amount">Number of points to refund</param>
+		/// <param name="amount">Number of points to refund.</param>
 		public void RefundPoints(int amount)
 		{
 			if (amount <= 0)
@@ -114,12 +116,31 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			int refundAmount = System.Math.Min(amount, spentPoints);
 			availablePoints += refundAmount;
 			spentPoints -= refundAmount;
-			SaveToData();
 		}
-}
 
 		/// <summary>
-		/// Reset all passive points (refund all spent points)
+		/// Force spent (and thus available) to match the true allocated total. Called once on
+		/// load so the point economy can never drift out of sync with the actual allocations —
+		/// e.g. if a corrupted allocation save reset the tree but not the spent counter.
+		/// totalPointsEarned is authoritative (append-only, +1 per level), so available is
+		/// derived as total - spent.
+		/// </summary>
+		public void ReconcileSpentPoints(int actualSpent)
+		{
+			if (actualSpent < 0)
+				actualSpent = 0;
+
+			if (actualSpent == spentPoints)
+				return;
+
+			spentPoints = actualSpent;
+			availablePoints = totalPointsEarned - spentPoints;
+			if (availablePoints < 0)
+				availablePoints = 0;
+		}
+
+		/// <summary>
+		/// Reset all passive points (refund all spent points back to available).
 		/// </summary>
 		public void ResetAllPoints()
 		{
@@ -128,15 +149,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Clear all passive points (for new character or reset)
+		/// Clear all passive points (for a new character or a full reset).
 		/// </summary>
 		public void ClearAllPoints()
 		{
 			availablePoints = 0;
 			totalPointsEarned = 0;
-			spentPoints = 0
+			spentPoints = 0;
+		}
+
 		/// <summary>
-		/// Static helper: Award passive points to a player
+		/// Static helper: Award passive points to a player.
 		/// </summary>
 		public static void AwardPlayerPoints(Player player, int amount)
 		{
@@ -144,7 +167,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Static helper: Get a player's available passive points
+		/// Static helper: Get a player's available passive points.
 		/// </summary>
 		public static int GetPlayerAvailablePoints(Player player)
 		{
@@ -152,7 +175,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Static helper: Spend passive points for a player
+		/// Static helper: Spend passive points for a player.
 		/// </summary>
 		public static bool SpendPlayerPoints(Player player, int amount)
 		{
@@ -160,7 +183,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		}
 
 		/// <summary>
-		/// Static helper: Check if player has enough points
+		/// Static helper: Check if a player has enough points.
 		/// </summary>
 		public static bool PlayerHasEnoughPoints(Player player, int amount)
 		{
