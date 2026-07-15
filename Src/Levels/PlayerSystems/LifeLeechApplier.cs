@@ -31,6 +31,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// <summary>
 		/// Per-hit ceiling as a fraction of max life. Leech scaling with the weapon is the point, but
 		/// uncapped a single big hit on a boss full-heals on its own and the cooldown stops mattering.
+		///
+		/// This bounds the LEECH — how much of a hit converts to life — and is applied BEFORE healing
+		/// bonuses, which then multiply the capped result. So it is not an absolute ceiling on the
+		/// heal: increased healing raises it, deliberately. Capping last instead would mean every
+		/// point of healing above the cap silently did nothing, which is the same species of lie as a
+		/// leech stat with no consumer — on your sheet, quietly discarded.
 		/// </summary>
 		public const float MaxLeechPerHit = 0.15f;
 
@@ -55,11 +61,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			if (leechFraction <= 0f)
 				return;
 
-			int heal = (int)Math.Round(damageDone * leechFraction * (1f + effects.HealingPercent / 100f));
+			// Cap the leech first, THEN amplify it. Healing bonuses are the last multiplier applied —
+			// see MaxLeechPerHit. Vengeance at full ramp therefore doubles the effective ceiling
+			// rather than being swallowed by it, which is the whole point of a talent that pays you
+			// for being nearly dead.
+			float leeched = damageDone * leechFraction;
 
-			int perHitCap = Math.Max(1, (int)(Player.statLifeMax2 * MaxLeechPerHit));
-			if (heal > perHitCap)
-				heal = perHitCap;
+			float perHitCap = Math.Max(1f, Player.statLifeMax2 * MaxLeechPerHit);
+			if (leeched > perHitCap)
+				leeched = perHitCap;
+
+			int heal = (int)Math.Round(leeched * (1f + effects.HealingPercent / 100f));
 
 			if (Heal(Player, heal))
 				healCooldown = HealCooldownTicks;

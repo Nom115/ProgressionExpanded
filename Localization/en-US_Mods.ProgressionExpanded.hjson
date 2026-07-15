@@ -58,6 +58,7 @@ Configs: {
 			XPBarSettings: XP Bar Settings
 			LevelDisplaySettings: Level Display Settings
 			HealthBarSettings: Health Bar Settings Header
+			VengeanceReadoutSettings: Vengeance Readout Settings
 		}
 
 		ShowXPBar: {
@@ -123,6 +124,26 @@ Configs: {
 		HideVanillaMana: {
 			Tooltip: ""
 			Label: Hide Vanilla Mana
+		}
+
+		ShowVengeanceReadout: {
+			Label: Show Vengeance Readout
+			Tooltip: Show damage taken in the last 4 seconds and the bonus it is buying. Only appears while the Vengeance talent is picked and ramping.
+		}
+
+		VengeanceReadoutX: {
+			Label: Vengeance Readout X
+			Tooltip: Horizontal position (pixels from left)
+		}
+
+		VengeanceReadoutY: {
+			Label: Vengeance Readout Y
+			Tooltip: Vertical position (pixels from bottom)
+		}
+
+		VengeanceReadoutScale: {
+			Label: Vengeance Readout Scale
+			Tooltip: Size multiplier for the Vengeance readout
 		}
 	}
 }

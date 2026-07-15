@@ -54,6 +54,27 @@ namespace ProgressionExpanded.Src.Config
 		[DefaultValue(1.0f)]
 		public float HealthBarScale { get; set; }
 
+		/// <summary>
+		/// The Vengeance ramp readout. Only ever drawn while Vengeance is picked and the ramp is
+		/// live, so leaving this on costs nothing on any other build.
+		/// </summary>
+		[Header("VengeanceReadoutSettings")]
+		[DefaultValue(true)]
+		public bool ShowVengeanceReadout { get; set; }
+
+		[Range(0, 1920)]
+		[DefaultValue(20)]
+		public int VengeanceReadoutX { get; set; }
+
+		[Range(0, 1080)]
+		[DefaultValue(160)]
+		public int VengeanceReadoutY { get; set; }
+
+		[Range(0.5f, 2.0f)]
+		[Increment(0.1f)]
+		[DefaultValue(1.0f)]
+		public float VengeanceReadoutScale { get; set; }
+
 		[Header("LevelDisplaySettings")]
 		[DefaultValue(true)]
 		public bool ShowPlayerLevels { get; set; }

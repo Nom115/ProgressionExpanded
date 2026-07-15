@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Terraria;
 using Terraria.ModLoader;
@@ -30,12 +31,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override string Description =>
 			"Your maximum life is doubled, but you have 30% less defense. Leech 30% of the damage you "
-			+ "deal as life. Gain 1.5% increased damage for every 1% of your maximum life taken in the "
-			+ "last 4 seconds, up to +100%. Fight hurt or fight for nothing.";
+			+ "deal as life. For every 1% of your maximum life taken in the last 4 seconds, gain 1.5% "
+			+ "increased damage AND 1.5% increased healing from all sources, up to +100%. "
+			+ "Fight hurt or fight for nothing.";
 
 		private const float WindowSeconds = 4f;
 		private const float DamagePerLifeFraction = 1.5f;
-		private const float MaxBonus = 1.0f;
+
+		/// <summary>Ceiling on the ramp, as a fraction. Public so the HUD can colour the maxed state
+		/// off the real number instead of hardcoding its own copy of it.</summary>
+		public const float MaxRampBonus = 1.0f;
+
 		private const float LifeMultiplier = 1.00f;
 		private const float DefensePenalty = 0.30f;
 		private const float LeechFraction = 0.30f;
@@ -73,57 +79,123 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override IReadOnlyDictionary<string, float> PercentBonuses => percentBonuses;
 
-		/// <summary>Damage taken inside the window, as a fraction of max life.</summary>
-		private float recentDamageFraction;
+		/// <summary>
+		/// Each hit taken, held for exactly WindowSeconds and then dropped. Raw damage, not a
+		/// fraction, so the HUD can state the actual number and the bonus can be derived from it.
+		///
+		/// This used to be a single float decayed by a flat 1/(WindowSeconds*60) per tick, which did
+		/// NOT mean "damage taken in the last 4 seconds" despite the description saying so: the
+		/// decrement was absolute rather than proportional, so a hit for 50% of max life decayed away
+		/// in 2s and a hit for 10% in 0.4s. Only a hit for exactly 100% of max life lasted the stated
+		/// 4. Putting the number on screen made that discrepancy the player's problem, so the window
+		/// is now literal. Same shape as StaggerTalent's instance list.
+		/// </summary>
+		private readonly List<DamageEntry> recentHits = new List<DamageEntry>();
 
 		public override void OnDeactivate(Player player)
 		{
-			recentDamageFraction = 0f;
+			recentHits.Clear();
 		}
 
 		public override void OnRespawn(Player player)
 		{
-			recentDamageFraction = 0f;
+			// Never carry a ramp across a life.
+			recentHits.Clear();
 		}
 
 		public override void PostHurt(Player player, Player.HurtInfo info)
 		{
-			if (player.statLifeMax2 <= 0)
+			if (info.Damage <= 0)
 				return;
 
-			recentDamageFraction += info.Damage / (float)player.statLifeMax2;
+			recentHits.Add(new DamageEntry { Damage = info.Damage, TimeRemaining = WindowSeconds });
 		}
 
 		public override void PostUpdate(Player player)
 		{
-			if (recentDamageFraction <= 0f)
+			if (recentHits.Count == 0)
 				return;
 
-			// Linear decay over the window: a hit's contribution is fully gone WindowSeconds after it
-			// landed. Decaying continuously rather than expiring a queue of timestamps keeps the
-			// bonus smooth — it ramps down as you stop being hit instead of falling off a cliff.
-			recentDamageFraction -= 1f / (WindowSeconds * 60f);
-			if (recentDamageFraction < 0f)
-				recentDamageFraction = 0f;
+			const float deltaTime = 1f / 60f;
+			for (int i = recentHits.Count - 1; i >= 0; i--)
+			{
+				recentHits[i].TimeRemaining -= deltaTime;
+				if (recentHits[i].TimeRemaining <= 0f)
+					recentHits.RemoveAt(i);
+			}
 		}
 
 		public override void ResetEffects(Player player)
 		{
-			float bonus = recentDamageFraction * DamagePerLifeFraction;
+			float bonus = GetCurrentBonus(player);
 			if (bonus <= 0f)
 				return;
-
-			if (bonus > MaxBonus)
-				bonus = MaxBonus;
 
 			player.GetDamage(DamageClass.Generic) *= 1f + bonus;
 		}
 
-		/// <summary>Current bonus as a fraction, for the UI to show live.</summary>
-		public float GetCurrentBonus()
+		public override void PostUpdateMiscEffects(Player player)
 		{
-			float bonus = recentDamageFraction * DamagePerLifeFraction;
-			return bonus > MaxBonus ? MaxBonus : bonus;
+			float bonus = GetCurrentBonus(player);
+			if (bonus <= 0f)
+				return;
+
+			// The ramp pays out twice: harder hits AND bigger heals, by the same percentage. Healing
+			// is the half that makes the life pool a resource rather than a countdown — you spend it
+			// getting hit and buy it back by swinging, and the more you are losing the better the
+			// exchange rate gets.
+			//
+			// Routed through the shared channel rather than applied per-heal-site, so it reaches
+			// every discrete heal at once: potions (CombatEffectStats.GetHealLife), leech and the
+			// Devourer kill-burst (LifeLeechApplier). Both of those read in hooks that run after this
+			// one, so the value is populated by the time they look — see the ordering note on
+			// CombatEffectStats.
+			CombatEffectStats.Get(player).HealingPercent += bonus * 100f;
+
+			// Regen is amplified HERE rather than by folding it into HealingPercent, for two reasons.
+			// Ordering: CombatEffectStats and TalentPlayer are separate ModPlayers with no defined
+			// order between them, so a reader in CombatEffectStats.PostUpdateMiscEffects could run
+			// before this contributes. And scope: HealingPercent is also fed by item modifiers, and
+			// silently making that stat scale regeneration would quietly redefine the "Healing" roll
+			// and duplicate what LifeRegenPercent already means.
+			//
+			// Guarded on > 0 for the reason StatApplier's LifeRegenPercent case is: lifeRegen goes
+			// NEGATIVE while a DoT ticks, so an unguarded multiply would make Bleeding/Poison/On Fire
+			// proportionally more lethal the closer to death you got — the exact inverse of this
+			// talent. Applied from PostUpdateMiscEffects to match where LifeRegenPercent already does
+			// the same job.
+			if (player.lifeRegen > 0)
+				player.lifeRegen += (int)Math.Round(player.lifeRegen * bonus);
+		}
+
+		/// <summary>Raw damage taken inside the window. What the HUD prints.</summary>
+		public float GetRecentDamage()
+		{
+			float total = 0f;
+			for (int i = 0; i < recentHits.Count; i++)
+				total += recentHits[i].Damage;
+			return total;
+		}
+
+		/// <summary>
+		/// Current bonus as a fraction, applied to both damage dealt and healing received.
+		///
+		/// Derived from CURRENT max life rather than banked at hit time, so the doubling this talent
+		/// grants is already priced in — which is the self-tension noted above, not an oversight.
+		/// </summary>
+		public float GetCurrentBonus(Player player)
+		{
+			if (player.statLifeMax2 <= 0)
+				return 0f;
+
+			float bonus = (GetRecentDamage() / player.statLifeMax2) * DamagePerLifeFraction;
+			return bonus > MaxRampBonus ? MaxRampBonus : bonus;
+		}
+
+		private class DamageEntry
+		{
+			public float Damage { get; set; }
+			public float TimeRemaining { get; set; }
 		}
 	}
 }
