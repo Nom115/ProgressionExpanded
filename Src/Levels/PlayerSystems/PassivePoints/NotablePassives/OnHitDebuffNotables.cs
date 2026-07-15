@@ -38,7 +38,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			if (tier <= 0 || target.friendly)
 				return;
 
-			target.AddBuff(BuffType, BaseTicks + TicksPerTier * (tier - 1));
+			// Ailment Effect from gear/passives (CombatEffectStats) extends the debuff — the generic
+			// hook that lets any class's on-hit ailment scale past its tier ceiling.
+			int ticks = BaseTicks + TicksPerTier * (tier - 1);
+			float ailmentMul = 1f + Player.GetModPlayer<CombatEffectStats>().AilmentPercent / 100f;
+			target.AddBuff(BuffType, (int)(ticks * ailmentMul));
 		}
 	}
 

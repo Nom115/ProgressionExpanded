@@ -41,6 +41,16 @@ namespace ProgressionExpanded.Src.NPCs
 		private const float ENEMY_DAMAGE_PER_LEVEL_ABOVE = 0.20f;  // +20% per level the enemy is above you
 		private const float ENEMY_DAMAGE_MAX_MULTIPLIER = 5.0f;    // cap so it stays survivable
 
+		// --- Level-assignment range (squished to world level ±MAX_LEVEL_OFFSET, biased upward by
+		// depth & danger biome; overworld hugs the world level). All tunable. ---
+		private const int MAX_LEVEL_OFFSET = 6;        // hard clamp: enemies stay within ±6 of world level
+		private const int SURFACE_SPREAD = 2;          // random ± spread on top of the depth/biome bias
+		private const float DEPTH_WEIGHT = 1.0f;       // how strongly depth pushes level up (share of +6)
+		private const float BIOME_BONUS_RANGE = 2000f; // search radius for the nearest player's biome
+		private const float DUNGEON_BONUS = 0.6f;      // upward bias in the Dungeon
+		private const float EVIL_BONUS = 0.35f;        // Corruption / Crimson
+		private const float JUNGLE_BONUS = 0.35f;      // Jungle
+
 		public override bool InstancePerEntity => true;
 
 		// Per-NPC instance data
@@ -73,30 +83,75 @@ namespace ProgressionExpanded.Src.NPCs
 
 		/// <summary>
 		/// Initialize NPC level based on world level when spawned
-		/// Uses 60/40 distribution: 60% within ±3 levels, 40% 5-10 levels above
+		/// Squished to world level ±MAX_LEVEL_OFFSET; overworld hugs world level, depth & danger biomes bias upward.
 		/// </summary>
 		private void InitializeLevel(Terraria.NPC npc)
 		{
 			if (levelInitialized) return;
 
-			// Base level is the world level
 			int worldLevel = WorldLevelManager.GetWorldLevel();
-			
-			int variance;
-			// 60% chance: within ±3 levels of world level
-			if (Main.rand.NextFloat() < 0.6f)
-			{
-				variance = Main.rand.Next(-3, 4); // -3 to +3
-			}
-			// 40% chance: 5-10 levels above world level
-			else
-			{
-				variance = Main.rand.Next(5, 11); // 5 to 10
-			}
-			
-			int finalLevel = System.Math.Max(1, worldLevel + variance);
 
+			// Overworld hugs the world level; depth and danger biomes bias the offset upward so deep
+			// caverns / the Dungeon / evil / Jungle approach +MAX_LEVEL_OFFSET. Clamped to ±6.
+			float depthFrac = GetDepthFraction(npc);
+			float biomeBonus = GetBiomeBonus(npc);
+			float upwardBias = System.Math.Clamp(depthFrac * DEPTH_WEIGHT + biomeBonus, 0f, 1f);
+
+			int center = (int)System.Math.Round(upwardBias * MAX_LEVEL_OFFSET);
+			int spread = Main.rand.Next(-SURFACE_SPREAD, SURFACE_SPREAD + 1);
+			int offset = System.Math.Clamp(center + spread, -MAX_LEVEL_OFFSET, MAX_LEVEL_OFFSET);
+
+			int finalLevel = System.Math.Max(1, worldLevel + offset);
 			SetLevel(npc, finalLevel);
+		}
+
+		/// <summary>
+		/// 0 at or above the surface line, ramping linearly to 1 near the underworld. Drives the
+		/// "deeper = higher level" bias.
+		/// </summary>
+		private static float GetDepthFraction(Terraria.NPC npc)
+		{
+			float tileY = npc.Center.Y / 16f;
+			float surface = (float)Main.worldSurface;
+			float bottom = Main.maxTilesY - 200f; // start of the underworld; deepest meaningful layer
+			if (bottom <= surface) return 0f;      // guard against tiny / degenerate worlds
+			return System.Math.Clamp((tileY - surface) / (bottom - surface), 0f, 1f);
+		}
+
+		/// <summary>
+		/// Upward level bias from the local biome, read from the nearest active player (reusing the
+		/// mod's existing "nearest player within range → read Zone*" idiom). Returns the strongest
+		/// applicable bonus, or 0 for open ground / no player near.
+		/// </summary>
+		private static float GetBiomeBonus(Terraria.NPC npc)
+		{
+			Terraria.Player player = NearestPlayer(npc, BIOME_BONUS_RANGE);
+			if (player == null) return 0f;
+
+			float bonus = 0f;
+			if (player.ZoneDungeon) bonus = System.Math.Max(bonus, DUNGEON_BONUS);
+			if (player.ZoneCorrupt || player.ZoneCrimson) bonus = System.Math.Max(bonus, EVIL_BONUS);
+			if (player.ZoneJungle) bonus = System.Math.Max(bonus, JUNGLE_BONUS);
+			return bonus;
+		}
+
+		/// <summary>Nearest active, living player to the NPC within maxRange px, or null.</summary>
+		private static Terraria.Player NearestPlayer(Terraria.NPC npc, float maxRange)
+		{
+			Terraria.Player nearest = null;
+			float nearestDistSq = maxRange * maxRange;
+			for (int i = 0; i < Main.maxPlayers; i++)
+			{
+				Terraria.Player p = Main.player[i];
+				if (p == null || !p.active || p.dead) continue;
+				float distSq = Vector2.DistanceSquared(p.Center, npc.Center);
+				if (distSq <= nearestDistSq)
+				{
+					nearestDistSq = distSq;
+					nearest = p;
+				}
+			}
+			return nearest;
 		}
 
 		#endregion

@@ -41,7 +41,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			if (Player.statLife >= Player.statLifeMax2)
 				return;
 
-			int heal = 2 + tier; // tier 1..4 -> 3..6 HP per proc
+			var effects = Player.GetModPlayer<CombatEffectStats>();
+
+			// Base tier heal amplified by Healing, plus a leech component scaling with damage dealt.
+			// Both come from gear/passives via CombatEffectStats, so Bloodthirst scales past its tiers
+			// — and any class with a leech/heal passive benefits from the same generic stats.
+			int heal = (int)Math.Round((2 + tier) * (1f + effects.HealingPercent / 100f)); // tier 1..4 base -> 3..6 HP
+			if (effects.LifeLeechPercent > 0f)
+				heal += (int)Math.Round(damageDone * effects.LifeLeechPercent / 100f);
+
 			int newLife = Math.Min(Player.statLifeMax2, Player.statLife + heal);
 			int healed = newLife - Player.statLife;
 			if (healed <= 0)

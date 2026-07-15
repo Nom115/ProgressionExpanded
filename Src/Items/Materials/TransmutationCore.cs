@@ -2,6 +2,7 @@ using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
 using ProgressionExpanded.Items.Materials;
+using ProgressionExpanded.Src.UI.Transmutation;
 
 namespace ProgressionExpanded.RPGModule.Items.Materials
 {
@@ -35,7 +36,7 @@ namespace ProgressionExpanded.RPGModule.Items.Materials
             // Only open UI on client side for the local player
             if (Main.myPlayer == player.whoAmI && !Main.dedServ)
             {
-                // ModContent.GetInstance<TransmutationUISystem>().Open();
+                ModContent.GetInstance<TransmutationUISystem>().Toggle();
             }
         }
 

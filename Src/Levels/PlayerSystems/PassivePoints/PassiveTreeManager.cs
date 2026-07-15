@@ -532,6 +532,21 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 				case "MovementSpeed":
 					Player.moveSpeed += value;
 					break;
+
+				// Shared "effect" stats via a flat node bonus (whole percent). Percent-bonus nodes use
+				// ApplyPercentBonusToStat (fraction ×100); both land as whole percents on the accumulator.
+				case "LifeLeech":
+					Player.GetModPlayer<CombatEffectStats>().LifeLeechPercent += value;
+					break;
+				case "Healing":
+					Player.GetModPlayer<CombatEffectStats>().HealingPercent += value;
+					break;
+				case "AilmentEffect":
+					Player.GetModPlayer<CombatEffectStats>().AilmentPercent += value;
+					break;
+				case "AreaEffect":
+					Player.GetModPlayer<CombatEffectStats>().AreaPercent += value;
+					break;
 			}
 		}
 
@@ -578,6 +593,23 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 					break;
 				case "MovementSpeed":
 					Player.moveSpeed *= 1f + value;
+					break;
+
+				// Shared "effect" stats (leech/healing/ailment/area) — these don't map to a vanilla
+				// Player field; they accumulate on CombatEffectStats for notable passives to read.
+				// The tree stores percents as fractions (0.10 = 10%), so convert to the whole-percent
+				// convention the accumulator uses. (No tree node grants these yet; forward-looking.)
+				case "LifeLeech":
+					Player.GetModPlayer<CombatEffectStats>().LifeLeechPercent += value * 100f;
+					break;
+				case "Healing":
+					Player.GetModPlayer<CombatEffectStats>().HealingPercent += value * 100f;
+					break;
+				case "AilmentEffect":
+					Player.GetModPlayer<CombatEffectStats>().AilmentPercent += value * 100f;
+					break;
+				case "AreaEffect":
+					Player.GetModPlayer<CombatEffectStats>().AreaPercent += value * 100f;
 					break;
 			}
 		}

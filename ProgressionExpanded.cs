@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Terraria.ModLoader;
 using ProgressionExpanded.Utils;
 using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
+using ProgressionExpanded.Items.Modifiers;
 
 namespace ProgressionExpanded
 {
@@ -19,6 +20,9 @@ namespace ProgressionExpanded
 			
 			// Load passive trees from JSON
 			PassiveTreeLoader.LoadAllTrees(this);
+
+			// Load item modifier pools from JSON
+			ItemModifierLoader.LoadAll(this);
 		}
 
 		public override void Unload()
@@ -28,6 +32,9 @@ namespace ProgressionExpanded
 			
 			// Unload passive trees
 			PassiveTreeLoader.UnloadTrees();
+
+			// Unload item modifier pools
+			ItemModifierLoader.Unload();
 		}
 	}
 }

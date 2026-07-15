@@ -32,8 +32,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 			if (target.life > 0 || target.friendly)
 				return;
 
-			float radius = 96f + 24f * tier; // tier 1..5 -> 120..216 px
-			int damage = 20 + 15 * tier;     // tier 1..5 -> 35..95
+			// Area-of-effect scaling from gear/passives (CombatEffectStats), uncapped by tier.
+			float areaMul = 1f + Player.GetModPlayer<CombatEffectStats>().AreaPercent / 100f;
+			float radius = (96f + 24f * tier) * areaMul; // tier 1..5 -> 120..216 px before the area bonus
+			int damage = (int)((20 + 15 * tier) * areaMul); // tier 1..5 -> 35..95 before the area bonus
 			Explode(target.Center, radius, damage);
 		}
 
