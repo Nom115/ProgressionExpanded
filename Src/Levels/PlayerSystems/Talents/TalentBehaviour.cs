@@ -66,6 +66,23 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 		public virtual void ResetEffects(Player player) { }
 		public virtual void PostUpdate(Player player) { }
 		public virtual void PostUpdateMiscEffects(Player player) { }
+
+		/// <summary>
+		/// Fires from inside Player.UpdateLifeRegen, after every debuff has applied its degeneration
+		/// and after honey/campfire/heart lantern, but before the natural ramp is added to lifeRegen.
+		/// Scale gear- and buff-sourced regeneration here, NOT in PostUpdateMiscEffects: that hook
+		/// runs immediately before UpdateLifeRegen, so lifeRegen is still empty of everything below.
+		/// A "lifeRegen &gt; 0" guard is meaningful here and only here.
+		/// </summary>
+		public virtual void UpdateLifeRegen(Player player) { }
+
+		/// <summary>
+		/// The natural lifeRegenTime ramp, before it is scaled by max life and folded into lifeRegen.
+		/// This is the only hook that can touch natural regeneration — it is added to lifeRegen at the
+		/// very end of UpdateLifeRegen, after every other ModPlayer hook in the tick has already run.
+		/// </summary>
+		public virtual void NaturalLifeRegen(Player player, ref float regen) { }
+
 		public virtual void ModifyHurt(Player player, ref Player.HurtModifiers modifiers) { }
 		public virtual void PostHurt(Player player, Player.HurtInfo info) { }
 		public virtual void OnHitNPC(Player player, NPC target, NPC.HitInfo hit, int damageDone) { }

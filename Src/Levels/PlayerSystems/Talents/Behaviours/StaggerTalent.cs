@@ -27,13 +27,27 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Stagger";
 
 		public override string Description =>
-			"150% more defense and +150 maximum life. 55% of the damage you take is dealt to you over "
-			+ "5.5 seconds instead of all at once. It is delayed, not prevented — you need to answer it.";
+			"150% more defense, +150 maximum life and +8 life regeneration per second. 55% of the damage "
+			+ "you take is dealt to you over 5.5 seconds instead of all at once. It is delayed, not "
+			+ "prevented — you need to answer it. Your life regeneration is doubled once the bleed has "
+			+ "run out and nothing has hit you for 5 seconds.";
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
 		private const float DefenseBonus = 1.50f;
 		private const float FlatLife = 150f;
+
+		/// <summary>
+		/// In HP per second, which is NOT the unit Terraria stores: player.lifeRegen counts half-HP
+		/// per second (120 lifeRegenCount = 1 HP, accumulated 60 times a second). The dictionary below
+		/// doubles this on the way in, so the constant reads in the units the talent description uses.
+		/// </summary>
+		private const float FlatRegenPerSecond = 8f;
+
+		/// <summary>Quiet time after the last real hit before regeneration doubles.</summary>
+		private const int OutOfCombatTicks = 60 * 5;
+
+		private const float RegenMultiplier = 2f;
 
 		/// <summary>
 		/// DefensePercent multiplies a Player.DefenseStat, which tracks adds and multiplies
@@ -51,10 +65,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// MaxHealth routes to StatModifier.Base in TalentPlayer.ModifyMaxStats — inside the
 		/// multipliers, so % life bonuses scale it. Flat would sit outside them and silently exclude
 		/// this 150 from every % life bonus in the game.
+		///
+		/// LifeRegen is doubled on the way in because Terraria counts lifeRegen in half-HP per second.
+		/// It lands via StatApplier from PostUpdateMiscEffects, which has two consequences worth
+		/// knowing: any vanilla DoT wipes it (UpdateLifeRegen zeroes a positive lifeRegen before
+		/// applying Poison/On Fire/Venom degen, so this is off entirely while one ticks), and the
+		/// out-of-combat doubling below catches it, taking it to 16 HP/s once the bleed has cleared.
+		/// The stagger bleed itself does NOT wipe it — StaggerDebuff is display-only and never sets
+		/// player.bleed — so this is the regeneration you answer your own bleed with.
 		/// </summary>
 		private static readonly Dictionary<string, float> flatBonuses = new Dictionary<string, float>
 		{
 			{ "MaxHealth", FlatLife },
+			{ "LifeRegen", FlatRegenPerSecond * 2f },
 		};
 
 		public override IReadOnlyDictionary<string, float> PercentBonuses => percentBonuses;
@@ -76,6 +99,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// </summary>
 		private bool applyingStaggerDamage;
 
+		/// <summary>Ticks since the last hit that was not our own bleed. Clamped, so it never wraps.</summary>
+		private int ticksSinceHurt = OutOfCombatTicks;
+
+		/// <summary>
+		/// A live bleed counts as combat no matter how quiet it has gone: the damage is still landing,
+		/// and letting regeneration double while it ticks would undo the "you need to answer it" half
+		/// of the talent. The timer is the backstop for the one case that makes no instance — a hit
+		/// taken at MaxInstances.
+		/// </summary>
+		private bool IsOutOfCombat => instances.Count == 0 && ticksSinceHurt >= OutOfCombatTicks;
+
 		public override void OnDeactivate(Player player)
 		{
 			ClearStagger(player);
@@ -91,10 +125,38 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		{
 			instances.Clear();
 			accumulatedDamage = 0f;
+			ticksSinceHurt = OutOfCombatTicks;
 
 			int buffType = ModContent.BuffType<StaggerDebuff>();
 			if (player.HasBuff(buffType))
 				player.ClearBuff(buffType);
+		}
+
+		/// <summary>
+		/// Gear- and buff-sourced regeneration, doubled from inside UpdateLifeRegen. The guard is real
+		/// here: every DoT has already driven lifeRegen negative by the time this fires, and doubling
+		/// a negative would make Poison and On Fire twice as lethal in exactly the quiet moment this
+		/// talent is meant to reward.
+		/// </summary>
+		public override void UpdateLifeRegen(Player player)
+		{
+			if (!IsOutOfCombat || player.lifeRegen <= 0)
+				return;
+
+			player.lifeRegen = (int)(player.lifeRegen * RegenMultiplier);
+		}
+
+		/// <summary>
+		/// The natural ramp, and the half that actually matters. Out of combat almost all of a player's
+		/// regeneration is this, and it is added to lifeRegen after every other hook in the tick has
+		/// run — so PostUpdateMiscEffects (where the rest of this mod scales regen) cannot reach it.
+		/// </summary>
+		public override void NaturalLifeRegen(Player player, ref float regen)
+		{
+			if (!IsOutOfCombat)
+				return;
+
+			regen *= RegenMultiplier;
 		}
 
 		public override void ModifyHurt(Player player, ref Player.HurtModifiers modifiers)
@@ -122,7 +184,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void PostHurt(Player player, Player.HurtInfo info)
 		{
-			if (applyingStaggerDamage || pendingStaggerPercent <= 0f)
+			// Our own bleed re-enters Hurt every tick it lands. It is not a fresh hit, and a live
+			// bleed already holds IsOutOfCombat false on its own.
+			if (applyingStaggerDamage)
+				return;
+
+			// Reset ABOVE the pendingStaggerPercent early-out. A hit taken at MaxInstances is not
+			// staggered but is still the player being attacked, and returning first would let them
+			// count as out of combat while under fire — precisely when the cap is being hit.
+			ticksSinceHurt = 0;
+
+			if (pendingStaggerPercent <= 0f)
 				return;
 
 			// info.Damage is post-mitigation, so this inverts the ModifyHurt multiply to recover the
@@ -151,6 +223,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
+			// Counted here rather than in PostUpdate because Player.Update runs PostUpdateMiscEffects
+			// immediately before UpdateLifeRegen, and the regen hooks below read the result. Clamped
+			// rather than left to climb, so it cannot overflow across a long session.
+			if (ticksSinceHurt < OutOfCombatTicks)
+				ticksSinceHurt++;
+
 			if (instances.Count == 0)
 			{
 				accumulatedDamage = 0f;

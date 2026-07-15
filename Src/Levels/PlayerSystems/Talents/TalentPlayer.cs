@@ -236,6 +236,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 			}
 		}
 
+		public override void UpdateLifeRegen()
+		{
+			for (int i = 0; i < active.Count; i++)
+				active[i].UpdateLifeRegen(Player);
+		}
+
+		public override void NaturalLifeRegen(ref float regen)
+		{
+			for (int i = 0; i < active.Count; i++)
+				active[i].NaturalLifeRegen(Player, ref regen);
+		}
+
 		public override void ModifyHurt(ref Player.HurtModifiers modifiers)
 		{
 			for (int i = 0; i < active.Count; i++)
