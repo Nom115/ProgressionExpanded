@@ -13,6 +13,41 @@ Items: {
 		Tooltip: ""
 		DisplayName: Orb Of Transmutation
 	}
+
+	DivineOrb: {
+		DisplayName: Divine Orb
+		Tooltip: ""
+	}
+
+	OrbOfAlteration: {
+		DisplayName: Orb Of Alteration
+		Tooltip: ""
+	}
+
+	OrbOfAnnulment: {
+		DisplayName: Orb Of Annulment
+		Tooltip: ""
+	}
+
+	OrbOfAscendance: {
+		DisplayName: Orb Of Ascendance
+		Tooltip: ""
+	}
+
+	OrbOfAugmentation: {
+		DisplayName: Orb Of Augmentation
+		Tooltip: ""
+	}
+
+	OrbOfCataclysm: {
+		DisplayName: Orb Of Cataclysm
+		Tooltip: ""
+	}
+
+	RegalOrb: {
+		DisplayName: Regal Orb
+		Tooltip: ""
+	}
 }
 
 Configs: {
