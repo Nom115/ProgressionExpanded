@@ -1,4 +1,5 @@
 using Terraria;
+using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace ProgressionExpanded.Items.Modifiers
@@ -29,6 +30,13 @@ namespace ProgressionExpanded.Items.Modifiers
 			if (item == null || item.IsAir)
 				return ItemCategory.None;
 
+			// Ammo carries a damage value for the weapon that fires it, but is not itself a weapon.
+			// This also covers coins: vanilla makes every coin Coin Gun ammo, so a Silver Coin has a
+			// damage stat and would otherwise classify as a ranged weapon and roll modifiers — which
+			// is exactly how a stack of currency ends up granting +4% damage.
+			if (item.ammo != AmmoID.None)
+				return ItemCategory.None;
+
 			// Accessories (checked first: some accessories also carry defense).
 			if (item.accessory)
 				return ItemCategory.Accessory;
@@ -37,8 +45,10 @@ namespace ProgressionExpanded.Items.Modifiers
 			if (item.defense > 0 && (item.headSlot >= 0 || item.bodySlot >= 0 || item.legSlot >= 0))
 				return ItemCategory.Armor;
 
-			// Weapons: deal damage and are not tools.
-			if (item.damage > 0 && !IsTool(item))
+			// Weapons: deal damage, are actually usable, and are not tools. The useStyle test is what
+			// separates a real weapon from anything that merely carries a damage number — plenty of
+			// material and currency items do, and none of them are ever swung.
+			if (item.damage > 0 && item.useStyle != ItemUseStyleID.None && !IsTool(item))
 				return ClassifyWeapon(item);
 
 			return ItemCategory.None;

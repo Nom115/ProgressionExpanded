@@ -6,14 +6,24 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 {
 	/// <summary>
 	/// Notable Passive: Bloodthirst — the player-side mirror of the enemy "Leech" affix.
-	/// Landing a hit on an enemy heals a small, tier-scaled amount of health. An internal
-	/// cooldown keeps multi-hit / AoE weapons from over-healing. Gated on the node tier.
+	/// Landing a hit leeches a percentage of the damage dealt as life. An internal cooldown keeps
+	/// multi-hit / AoE weapons from over-healing. Gated on the node tier.
 	/// </summary>
 	public class Bloodthirst : ModPlayer
 	{
 		private const string TreeId = "warrior_tree";
 		private const string NodeId = "bloodthirst_notable";
 		private const int HealCooldownTicks = 18; // ~0.3s between heals
+
+		/// <summary>Fraction of damage dealt leeched per tier — 2% per tier, 8% at max rank.</summary>
+		private const float LeechPerTier = 0.02f;
+
+		/// <summary>
+		/// Per-hit ceiling as a fraction of max life. Leech scales with the weapon, which is the
+		/// point, but without a cap a single big hit on a boss would full-heal on its own and the
+		/// cooldown wouldn't matter.
+		/// </summary>
+		private const float MaxLeechPerHit = 0.15f;
 
 		private int tier;
 		private int healCooldown;
@@ -43,12 +53,16 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 
 			var effects = Player.GetModPlayer<CombatEffectStats>();
 
-			// Base tier heal amplified by Healing, plus a leech component scaling with damage dealt.
-			// Both come from gear/passives via CombatEffectStats, so Bloodthirst scales past its tiers
-			// — and any class with a leech/heal passive benefits from the same generic stats.
-			int heal = (int)Math.Round((2 + tier) * (1f + effects.HealingPercent / 100f)); // tier 1..4 base -> 3..6 HP
-			if (effects.LifeLeechPercent > 0f)
-				heal += (int)Math.Round(damageDone * effects.LifeLeechPercent / 100f);
+			// Leech a share of the damage dealt, amplified by Healing, plus any leech granted by
+			// gear/passives via CombatEffectStats. This used to be a flat (2 + tier) HP, which meant
+			// 6 HP a hit at max rank — meaningful at level 10 and a rounding error against a
+			// Hardmode weapon. As a percentage of damage it keeps pace with the whole game.
+			float leechFraction = LeechPerTier * tier + effects.LifeLeechPercent / 100f;
+			int heal = (int)Math.Round(damageDone * leechFraction * (1f + effects.HealingPercent / 100f));
+
+			int perHitCap = Math.Max(1, (int)(Player.statLifeMax2 * MaxLeechPerHit));
+			if (heal > perHitCap)
+				heal = perHitCap;
 
 			int newLife = Math.Min(Player.statLifeMax2, Player.statLife + heal);
 			int healed = newLife - Player.statLife;

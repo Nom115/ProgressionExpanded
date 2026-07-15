@@ -1,27 +1,108 @@
+using Microsoft.Xna.Framework;
 using Terraria;
+using Terraria.ID;
 using Terraria.ModLoader;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Attributes;
+using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
+using ProgressionExpanded.Utils.DataManagers;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems
 {
 	/// <summary>
-	/// Manages passive points that players earn on level up.
-	/// Passive points can be spent to permanently increase stats via the passive tree.
+	/// Manages passive points that players earn on level up, and owns the point economy's
+	/// invariant: available + spent == totalEarned, where totalEarned is append-only.
+	///
+	/// Points are spent on two competing sinks — attributes (AttributeManager) and minor talents
+	/// (PassiveTreeManager). Because the true spend is split across ModPlayers whose LoadData order
+	/// is an implementation detail, this class pulls both totals on the first update tick rather
+	/// than letting either sink push its own reconcile. See PostUpdateMiscEffects.
 	/// </summary>
 	public class PassivePointManager : ModPlayer
 	{
 		private const string AVAILABLE_POINTS_KEY = "AvailablePassivePoints";
 		private const string TOTAL_POINTS_KEY = "TotalPassivePointsEarned";
 		private const string SPENT_POINTS_KEY = "SpentPassivePoints";
+		private const string SCHEMA_VERSION_KEY = "ProgressionSchemaVersion";
+
+		/// <summary>
+		/// Bump when a change invalidates existing allocations. Characters below this get a one-shot
+		/// wipe-and-refund on load (see RunSchemaMigration). v2 = attributes + boss-gated talent slots.
+		/// </summary>
+		private const int SCHEMA_VERSION = 2;
 
 		private int availablePoints = 0;
 		private int totalPointsEarned = 0;
 		private int spentPoints = 0;
+		private int schemaVersion = 0;
+		private bool reconciled = false;
 
 		public override void Initialize()
 		{
 			availablePoints = 0;
 			totalPointsEarned = 0;
 			spentPoints = 0;
+			schemaVersion = 0;
+			reconciled = false;
+		}
+
+		/// <summary>
+		/// Migrate then reconcile, exactly once per character load. This runs here rather than in
+		/// either sink because by the first update tick every ModPlayer's LoadData has definitively
+		/// run — so this is the earliest point where the true spend can be summed without depending
+		/// on load order between managers.
+		/// </summary>
+		public override void PostUpdateMiscEffects()
+		{
+			if (reconciled)
+				return;
+
+			RunSchemaMigration();
+
+			int spent = Player.GetModPlayer<PassiveTreeManager>().GetTotalSpentAcrossTrees()
+					  + Player.GetModPlayer<AttributeManager>().GetTotalSpentOnAttributes();
+			ReconcileSpentPoints(spent);
+
+			reconciled = true;
+		}
+
+		/// <summary>
+		/// One-shot upgrade of a pre-rework character. Old node ids are gone, flat bonuses became
+		/// percentages and the slot cap was replaced, so no honest old-to-new mapping exists —
+		/// everything is refunded and respent instead. Worlds need no equivalent: talent slots read
+		/// vanilla's live boss flags, so an existing world simply has the right slots already open.
+		/// </summary>
+		private void RunSchemaMigration()
+		{
+			if (schemaVersion >= SCHEMA_VERSION)
+				return;
+
+			Player.GetModPlayer<PassiveTreeManager>().WipeAllocations();
+			Player.GetModPlayer<AttributeManager>().WipeAll();
+
+			// Allocations used to live in PlayerDataManager's string dictionary. They have their own
+			// TagCompound now, so the old key is orphaned data that would otherwise ride along in
+			// every save forever.
+			PlayerDataManager.RemoveKey(Player, "PassiveTreeAllocations");
+
+			// Rebuild the budget from level, not from the stored counter. Levels 2..MAX award one
+			// point each, so level-1 is the true lifetime total. If a save predates the award path
+			// or ever missed a level-up, this repairs the shortfall rather than locking it in.
+			// totalPointsEarned is append-only, so it is only ever revised upward.
+			int earnedByLevel = PlayerLevelManager.GetLevel(Player) - 1;
+			if (earnedByLevel < 0)
+				earnedByLevel = 0;
+			if (totalPointsEarned < earnedByLevel)
+				totalPointsEarned = earnedByLevel;
+
+			ResetAllPoints();
+			schemaVersion = SCHEMA_VERSION;
+
+			if (Main.netMode != NetmodeID.Server && totalPointsEarned > 0)
+			{
+				Main.NewText(
+					$"Progression Expanded has been reworked — {totalPointsEarned} passive points refunded. Press P to respend them.",
+					new Color(255, 215, 0));
+			}
 		}
 
 		// Points are stored directly in this ModPlayer's own TagCompound, so LoadData
@@ -33,6 +114,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			tag[AVAILABLE_POINTS_KEY] = availablePoints;
 			tag[TOTAL_POINTS_KEY] = totalPointsEarned;
 			tag[SPENT_POINTS_KEY] = spentPoints;
+			tag[SCHEMA_VERSION_KEY] = schemaVersion;
 		}
 
 		public override void LoadData(Terraria.ModLoader.IO.TagCompound tag)
@@ -40,6 +122,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			availablePoints = tag.GetInt(AVAILABLE_POINTS_KEY);
 			totalPointsEarned = tag.GetInt(TOTAL_POINTS_KEY);
 			spentPoints = tag.GetInt(SPENT_POINTS_KEY);
+			// Absent on every pre-rework save, so GetInt's 0 default is exactly the signal that a
+			// character still needs migrating.
+			schemaVersion = tag.GetInt(SCHEMA_VERSION_KEY);
 		}
 
 		/// <summary>

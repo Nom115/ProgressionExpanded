@@ -17,11 +17,14 @@ using UIGrid = Terraria.ModLoader.UI.Elements.UIGrid;
 namespace ProgressionExpanded.Src.UI.PassiveTree
 {
 	/// <summary>
-	/// "Mastery Loadout" view: instead of a spatial tree, the player has a fixed number of mastery
-	/// slots (<see cref="PassiveTreeManager.MasterySlotCount"/>). Empty slots open a picker; socketed
-	/// masteries are ranked up/down or cleared. Everything is laid out with tModLoader's managed
-	/// containers (<see cref="UIGrid"/> for slots, <see cref="UIList"/> for the picker) so it cannot
-	/// overflow the panel and has no lines to keep aligned — the failure mode of the old tree canvas.
+	/// "Masteries" view: rankable stat bonuses bought with passive points, competing with attributes
+	/// for the same pool. There is no slot cap — the trailing empty card is just the button that
+	/// opens the picker. (The six fixed slots in this mod are the boss-gated talent slots, which are
+	/// a separate system and cost no points; see TalentSlotsPanel.)
+	///
+	/// Everything is laid out with tModLoader's managed containers (<see cref="UIGrid"/> for the
+	/// cards, <see cref="UIList"/> for the picker) so it cannot overflow the panel and has no lines
+	/// to keep aligned — the failure mode of the old tree canvas.
 	/// </summary>
 	public class MasteryLoadoutPanel : UIElement
 	{
@@ -141,7 +144,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			if (pointManager != null && treeManager != null)
 			{
 				infoText.SetText(
-					$"Available: {pointManager.GetAvailablePoints()} pts   |   Slots: {treeManager.GetSocketedCount(treeId)}/{PassiveTreeManager.MasterySlotCount}");
+					$"Available: {pointManager.GetAvailablePoints()} pts   |   Masteries ranked: {treeManager.GetSocketedCount(treeId)}");
 			}
 		}
 
@@ -195,7 +198,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			if (tree == null)
 				return;
 
-			// Socketed masteries first (stable order by display name), then empty slots.
+			// Ranked masteries first (stable order by display name).
 			List<PassiveNode> socketed = new List<PassiveNode>();
 			foreach (var pair in tree.Nodes)
 			{
@@ -207,9 +210,11 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			foreach (PassiveNode node in socketed)
 				slotsGrid.Add(new MasterySlotCard(this, treeManager, treeId, node));
 
-			int emptySlots = PassiveTreeManager.MasterySlotCount - socketed.Count;
-			for (int i = 0; i < emptySlots; i++)
-				slotsGrid.Add(new MasterySlotCard(this, treeManager, treeId, null));
+			// One trailing empty card as the "add a mastery" affordance. There is no slot cap any
+			// more, so this is no longer "the remaining slots" — it is just the button that opens
+			// the picker. The whole grid/picker split is replaced by a single browsable list when
+			// the UI is rebuilt around the three tabs; this keeps it usable until then.
+			slotsGrid.Add(new MasterySlotCard(this, treeManager, treeId, null));
 		}
 
 		private void RebuildPicker()

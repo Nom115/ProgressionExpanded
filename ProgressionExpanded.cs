@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Terraria.ModLoader;
 using ProgressionExpanded.Utils;
 using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 using ProgressionExpanded.Items.Modifiers;
 
 namespace ProgressionExpanded
@@ -21,6 +22,11 @@ namespace ProgressionExpanded
 			// Load passive trees from JSON
 			PassiveTreeLoader.LoadAllTrees(this);
 
+			// Discover the talent behaviours and validate that every slot offers exactly three
+			// choices. Errors are logged rather than thrown: a miscounted slot should be loud in the
+			// log without making the mod unloadable mid-development.
+			TalentRegistry.Load(this);
+
 			// Load item modifier pools from JSON
 			ItemModifierLoader.LoadAll(this);
 		}
@@ -32,6 +38,9 @@ namespace ProgressionExpanded
 			
 			// Unload passive trees
 			PassiveTreeLoader.UnloadTrees();
+
+			// Unload talents
+			TalentRegistry.Unload();
 
 			// Unload item modifier pools
 			ItemModifierLoader.Unload();

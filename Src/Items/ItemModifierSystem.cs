@@ -17,7 +17,7 @@ namespace ProgressionExpanded.Items
 	/// <c>EnemyModifierSystem</c>: it self-persists (SaveData/LoadData/Clone), renders the item's
 	/// rarity/modifiers in the tooltip, and (in later phases) applies their stats via the weapon /
 	/// equip hooks. Storage uses the same nested/JSON-string idiom proven in
-	/// <c>ItemDataManager</c> and <c>PassiveTreeManager.SaveAllocations</c>.
+	/// <c>ItemDataManager</c> and <c>PassiveTreeManager.SaveData</c>.
 	/// </summary>
 	public class ItemModifierSystem : GlobalItem
 	{
@@ -191,6 +191,19 @@ namespace ProgressionExpanded.Items
 						if (loaded != null)
 							mods = loaded;
 					}
+				}
+
+				// Strip state from anything that should never have been rolled in the first place.
+				// Ammo and coins used to classify as weapons (they carry a damage value for the
+				// weapon that fires them), so existing saves have stacks of currency with real
+				// modifiers baked onto them. Fixing the classifier alone would leave those in place
+				// forever, because rolled state is stored per item.
+				if ((rarity != ItemRarity.Normal || mods.Count > 0)
+					&& !ItemCategoryClassifier.IsEligible(item))
+				{
+					rarity = ItemRarity.Normal;
+					itemLevel = 0;
+					mods.Clear();
 				}
 			}
 			catch (Exception ex)

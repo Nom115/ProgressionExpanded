@@ -6,6 +6,8 @@ using Terraria.UI;
 using Terraria.GameContent.UI.Elements;
 using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
 using ProgressionExpanded.Src.Levels.PlayerSystems;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Attributes;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 using PassiveTreeType = ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.PassiveTree;
 using Terraria.ModLoader;
 
@@ -22,9 +24,22 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		private UIPanel tabContainer;
 		private UIElement contentArea;
 		
-		private Dictionary<string, MasteryLoadoutPanel> treePanels = new Dictionary<string, MasteryLoadoutPanel>();
+		// View keys, not tree ids. This scaffolding was always built for multiple tabs and only ever
+		// held one; it now carries the three views the rework needs.
+		private const string ViewAttributes = "attributes";
+		private const string ViewTalents = "talents";
+		private const string ViewMasteries = "masteries";
+
+		private Dictionary<string, UIElement> viewPanels = new Dictionary<string, UIElement>();
 		private Dictionary<string, TreeTabButton> tabButtons = new Dictionary<string, TreeTabButton>();
-		private string currentTreeId;
+		private string currentViewKey;
+
+		/// <summary>
+		/// The mastery tree's id, kept separate from currentViewKey on purpose. They used to be the
+		/// same field, so once the tabs became views, anything passing it to ResetTree would hit the
+		/// "unknown tree" early-out and silently do nothing.
+		/// </summary>
+		private string masteryTreeId;
 		
 		private UITextPanel<string> closeButton;
 		private UITextPanel<string> resetButton;
@@ -55,7 +70,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			mainContainer.Append(headerPanel);
 			
 			// Title
-			titleText = new UIText("Passive Skill Tree", 1.5f);
+			titleText = new UIText("Progression", 1.5f);
 			titleText.HAlign = 0.5f;
 			titleText.VAlign = 0.5f;
 			headerPanel.Append(titleText);
@@ -72,23 +87,23 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			headerPanel.Append(closeButton);
 			
 			// Reset button (resets current tree)
-			resetButton = new UITextPanel<string>("Reset Tree");
-			resetButton.Width.Set(100, 0f);
+			resetButton = new UITextPanel<string>("Respec Points");
+			resetButton.Width.Set(130, 0f);
 			resetButton.Height.Set(40, 0f);
 			resetButton.HAlign = 1f;
 			resetButton.VAlign = 0.5f;
 			resetButton.Left.Set(-60, 0f);
 			resetButton.BackgroundColor = new Color(200, 100, 50);
-			resetButton.OnLeftClick += (evt, element) => ResetCurrentTree();
+			resetButton.OnLeftClick += (evt, element) => RespecPoints();
 			headerPanel.Append(resetButton);
 			
 			// Respec button (resets tree and returns to class selection)
-			respecButton = new UITextPanel<string>("Respec Class");
+			respecButton = new UITextPanel<string>("Full Reset");
 			respecButton.Width.Set(120, 0f);
 			respecButton.Height.Set(40, 0f);
 			respecButton.HAlign = 1f;
 			respecButton.VAlign = 0.5f;
-			respecButton.Left.Set(-170, 0f);
+			respecButton.Left.Set(-200, 0f);
 			respecButton.BackgroundColor = new Color(150, 50, 200);
 			respecButton.OnLeftClick += (evt, element) => RespecClass();
 			headerPanel.Append(respecButton);
@@ -139,11 +154,11 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		private void ShowClassSelection()
 		{
-			// Clear content area and reset tree ID.
+			// Clear content area and drop the active view.
 			contentArea.RemoveAllChildren();
-			currentTreeId = null;
+			currentViewKey = null;
 
-			// Hide tree-only buttons and tabs.
+			// Hide the progression buttons and tabs.
 			if (headerPanel.HasChild(resetButton))
 				resetButton.Remove();
 			if (headerPanel.HasChild(respecButton))
@@ -163,11 +178,11 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		private void ShowPassiveTree()
 		{
-			// Clear content area and reset tree ID.
+			// Clear content area and drop the active view.
 			contentArea.RemoveAllChildren();
-			currentTreeId = null;
+			currentViewKey = null;
 
-			// Show tree buttons and tabs.
+			// Show the progression buttons and tabs.
 			if (!headerPanel.HasChild(resetButton))
 				headerPanel.Append(resetButton);
 			if (!headerPanel.HasChild(respecButton))
@@ -176,7 +191,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 				mainContainer.Append(tabContainer);
 
 			showingClassSelection = false;
-			titleText.SetText("Passive Skill Tree");
+			titleText.SetText("Progression");
 
 			LoadSelectedClassTree();
 		}
@@ -193,43 +208,55 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		private void LoadSelectedClassTree()
 		{
 			// Clear existing panels/tabs.
-			treePanels.Clear();
+			viewPanels.Clear();
 			tabButtons.Clear();
 			tabContainer.RemoveAllChildren();
+			currentViewKey = null;
 
-			// Resolve the tree for the selected class.
+			// Resolve the mastery tree for the selected class.
 			ClassSelectionManager.PlayerClass selectedClass = ClassSelectionManager.GetSelectedClass(Main.LocalPlayer);
-			string treeId = ClassSelectionManager.GetTreeIdForClass(selectedClass);
+			masteryTreeId = ClassSelectionManager.GetTreeIdForClass(selectedClass);
 
-			if (string.IsNullOrEmpty(treeId))
+			if (string.IsNullOrEmpty(masteryTreeId))
 			{
 				ShowContentError($"No tree found for class {selectedClass}.");
 				return;
 			}
 
-			PassiveTreeType tree = PassiveTreeLoader.GetTree(treeId);
+			PassiveTreeType tree = PassiveTreeLoader.GetTree(masteryTreeId);
 			if (tree == null)
 			{
-				Mod.Logger.Error($"[PassiveTree] Tree '{treeId}' is not loaded.");
-				ShowContentError($"Tree '{treeId}' not found!");
+				Mod.Logger.Error($"[PassiveTree] Tree '{masteryTreeId}' is not loaded.");
+				ShowContentError($"Tree '{masteryTreeId}' not found!");
 				return;
 			}
 
-			// Tab button for this tree.
-			TreeTabButton tabButton = new TreeTabButton(tree.TreeName, treeId);
-			tabButton.Left.Set(10, 0f);
-			tabButton.VAlign = 0.5f;
-			tabButton.OnLeftClick += (evt, element) => SwitchToTree(treeId);
-			tabContainer.Append(tabButton);
-			tabButtons[treeId] = tabButton;
+			AttributesPanel attributes = new AttributesPanel();
+			attributes.Activate();
+			AddView(ViewAttributes, "Attributes", attributes, 0);
 
-			// Mastery loadout panel for this tree.
-			MasteryLoadoutPanel panel = new MasteryLoadoutPanel(treeId);
-			panel.Activate();
-			treePanels[treeId] = panel;
+			TalentSlotsPanel talents = new TalentSlotsPanel();
+			talents.Activate();
+			AddView(ViewTalents, "Talents", talents, 1);
 
-			SwitchToTree(treeId);
+			MasteryLoadoutPanel masteries = new MasteryLoadoutPanel(masteryTreeId);
+			masteries.Activate();
+			AddView(ViewMasteries, "Masteries", masteries, 2);
+
+			SwitchToView(ViewAttributes);
 			Recalculate();
+		}
+
+		private void AddView(string viewKey, string label, UIElement panel, int index)
+		{
+			TreeTabButton tabButton = new TreeTabButton(label, viewKey);
+			tabButton.Left.Set(10 + index * 160, 0f);
+			tabButton.VAlign = 0.5f;
+			tabButton.OnLeftClick += (evt, element) => SwitchToView(viewKey);
+			tabContainer.Append(tabButton);
+			tabButtons[viewKey] = tabButton;
+
+			viewPanels[viewKey] = panel;
 		}
 
 		private void ShowContentError(string message)
@@ -241,59 +268,64 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			contentArea.Append(errorText);
 		}
 
-		private void ResetCurrentTree()
+		/// <summary>
+		/// Refund everything bought with passive points — attributes and masteries both, since they
+		/// share one pool and refunding only half of it would be a confusing partial reset. Talent
+		/// picks are untouched: they cost no points, so they are not part of this economy.
+		/// </summary>
+		private void RespecPoints()
 		{
-			if (showingClassSelection || string.IsNullOrEmpty(currentTreeId))
+			if (showingClassSelection || string.IsNullOrEmpty(masteryTreeId))
 				return;
-			
-			// Get tree manager and reset
-			PassiveTreeManager manager = Main.LocalPlayer.GetModPlayer<PassiveTreeManager>();
-			manager.ResetTree(currentTreeId);
-			
-			// Refresh UI
+
+			// masteryTreeId, not currentViewKey. Passing the view key here would hit ResetTree's
+			// unknown-tree early-out and silently refund nothing.
+			Main.LocalPlayer.GetModPlayer<PassiveTreeManager>().ResetTree(masteryTreeId);
+			AttributeManager.Get(Main.LocalPlayer).RefundAll();
+
 			ShowPassiveTree();
-			
-			Main.NewText("Tree reset! All points refunded.", Color.Yellow);
+			Main.NewText("Points refunded — attributes and masteries reset.", Color.Yellow);
 		}
 
+		/// <summary>
+		/// Full reset: points, talent picks, and the class choice.
+		/// </summary>
 		private void RespecClass()
 		{
 			if (showingClassSelection)
 				return;
-			
-			// Reset all allocations
+
 			PassiveTreeManager manager = Main.LocalPlayer.GetModPlayer<PassiveTreeManager>();
 			manager.ResetAllTrees();
-			
-			// Reset class selection
+			AttributeManager.Get(Main.LocalPlayer).RefundAll();
+			TalentPlayer.Get(Main.LocalPlayer).ClearAll();
+
 			ClassSelectionManager.ResetClass(Main.LocalPlayer);
-			
-			// Show class selection
 			ShowClassSelection();
-			
-			Main.NewText("Class reset! Choose a new path.", Color.Yellow);
+
+			Main.NewText("Everything reset — choose a new path.", Color.Yellow);
 		}
 
-		private void SwitchToTree(string treeId)
+		private void SwitchToView(string viewKey)
 		{
-			if (currentTreeId == treeId)
+			if (currentViewKey == viewKey)
 				return;
 
 			// Hide the current panel and deactivate its tab.
-			if (!string.IsNullOrEmpty(currentTreeId) && treePanels.ContainsKey(currentTreeId))
+			if (!string.IsNullOrEmpty(currentViewKey) && viewPanels.ContainsKey(currentViewKey))
 			{
-				contentArea.RemoveChild(treePanels[currentTreeId]);
-				if (tabButtons.ContainsKey(currentTreeId))
-					tabButtons[currentTreeId].SetActive(false);
+				contentArea.RemoveChild(viewPanels[currentViewKey]);
+				if (tabButtons.ContainsKey(currentViewKey))
+					tabButtons[currentViewKey].SetActive(false);
 			}
 
 			// Show the new panel and activate its tab.
-			currentTreeId = treeId;
-			if (treePanels.ContainsKey(treeId))
+			currentViewKey = viewKey;
+			if (viewPanels.ContainsKey(viewKey))
 			{
-				contentArea.Append(treePanels[treeId]);
-				if (tabButtons.ContainsKey(treeId))
-					tabButtons[treeId].SetActive(true);
+				contentArea.Append(viewPanels[viewKey]);
+				if (tabButtons.ContainsKey(viewKey))
+					tabButtons[viewKey].SetActive(true);
 			}
 		}
 

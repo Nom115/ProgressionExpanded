@@ -26,20 +26,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 		public override void PostUpdateMiscEffects()
 		{
-			// Apply bonus health every frame to ensure it persists
-			// This prevents vanilla caps from overriding our bonus
+			// Deferred read: Initialize() runs before LoadData(), so the value it read from
+			// PlayerDataManager was empty. Re-read authoritatively on the first tick.
 			if (!initialized)
 			{
-				// On first update, ensure health is loaded and applied
 				cachedBonusHealth = PlayerDataManager.GetInt(Player, BONUS_HEALTH_KEY, 0);
 				initialized = true;
 			}
 
-			// Apply bonus health to max health
-			if (cachedBonusHealth > 0)
-			{
-				Player.statLifeMax2 += cachedBonusHealth;
-			}
+			// The bonus is applied via ModifyMaxStats only. It used to ALSO be added to
+			// statLifeMax2 here, which double-counted it — every point of bonus health was worth
+			// two. ModifyMaxStats is the correct channel: it composes with other ModPlayers and
+			// with percentage max-life bonuses, which a raw statLifeMax2 += cannot.
 		}
 
 		public override void ModifyMaxStats(out StatModifier health, out StatModifier mana)

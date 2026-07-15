@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Terraria;
 using Terraria.ModLoader;
-using ProgressionExpanded.Utils.DataManagers;
 using Newtonsoft.Json;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Stats;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 {
@@ -15,7 +15,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 		// Stores node allocations: Dictionary<TreeId, Dictionary<NodeId, CurrentTier>>
 		private Dictionary<string, Dictionary<string, int>> treeAllocations = new Dictionary<string, Dictionary<string, int>>();
-		private bool initialized = false;
 
 		// Cached bonuses for performance
 		private Dictionary<string, float> cachedFlatBonuses = new Dictionary<string, float>();
@@ -23,33 +22,68 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 		public override void Initialize()
 		{
-			LoadAllocations();
+			// Deliberately does NOT read saved data. Allocations live in this ModPlayer's own
+			// TagCompound, so LoadData is the authoritative load and tModLoader guarantees it runs
+			// before any update tick. This used to read PlayerDataManager here and re-read on the
+			// first PostUpdateMiscEffects to work around Initialize running before LoadData — that
+			// whole dance is gone with the storage move, and with it the risk of a save-wipe.
+			treeAllocations.Clear();
 			RecalculateBonuses();
-			// tModLoader runs Initialize() BEFORE LoadData(), so the load above reads an empty
-			// PlayerDataManager (allocations come back as "{}"). Re-read authoritatively on the
-			// first PostUpdateMiscEffects tick (after LoadData has populated PlayerDataManager);
-			// otherwise the next SaveAllocations() would overwrite the real save with the empty
-			// set. Same deferred-read pattern as PlayerHealthManager.
-			initialized = false;
+		}
+
+		public override void SaveData(Terraria.ModLoader.IO.TagCompound tag)
+		{
+			tag[ALLOCATIONS_KEY] = JsonConvert.SerializeObject(treeAllocations);
+		}
+
+		public override void LoadData(Terraria.ModLoader.IO.TagCompound tag)
+		{
+			string json = tag.GetString(ALLOCATIONS_KEY);
+			if (string.IsNullOrEmpty(json))
+				json = "{}";
+
+			try
+			{
+				treeAllocations = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, int>>>(json)
+					?? new Dictionary<string, Dictionary<string, int>>();
+			}
+			catch
+			{
+				treeAllocations = new Dictionary<string, Dictionary<string, int>>();
+			}
+
+			RecalculateBonuses();
+		}
+
+		/// <summary>
+		/// Max life/mana are applied here rather than through the per-frame stat switches, because
+		/// StatModifier is the only channel where flat and percentage contributions compose
+		/// correctly — and it combines cleanly across ModPlayers, so AttributeManager can add
+		/// Strength's health independently without either of us knowing about the other.
+		/// </summary>
+		public override void ModifyMaxStats(out StatModifier health, out StatModifier mana)
+		{
+			health = StatModifier.Default;
+			mana = StatModifier.Default;
+
+			// Base sits inside the multipliers, Flat sits outside them. Flat max-life bonuses go in
+			// Base so that percentage bonuses (Fortitude) scale them, matching how Strength is added.
+			health.Base += GetFlatBonus("MaxHealth");
+			mana.Base += GetFlatBonus("MaxMana");
+
+			// += on a StatModifier is the additive-percentage operator: += 0.20f is "+20% maximum
+			// life", stacking additively with every other source rather than compounding.
+			health += GetPercentBonus("MaxLifePercent");
+			mana += GetPercentBonus("MaxManaPercent");
 		}
 
 		public override void PostUpdateMiscEffects()
 		{
-			if (!initialized)
-			{
-				LoadAllocations();
-				RecalculateBonuses();
-
-				// By the first update tick, PassivePointManager.LoadData and PlayerDataManager.LoadData
-				// have both run, so reconcile the point economy against the real allocations. This
-				// self-heals any spent/available drift (e.g. a corrupted allocation save that reset the
-				// tree but not the spent counter).
-				Player.GetModPlayer<PassivePointManager>().ReconcileSpentPoints(GetTotalSpentAcrossTrees());
-
-				initialized = true;
-			}
-
-			// Apply cached bonuses to stats
+			// Reconciling the point economy is deliberately NOT done here. The tree is no longer the
+			// only sink — attributes draw on the same pool — so reconciling against this tree's spend
+			// alone would set spent to the tree total and refund every attribute point while the
+			// attributes stayed allocated, compounding on every reload. PassivePointManager owns that
+			// invariant now and sums both sinks; see its PostUpdateMiscEffects.
 			ApplyBonusesToStats();
 		}
 
@@ -92,7 +126,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			treeAllocations[treeId][nodeId] = currentTier + 1;
 
 			// Save and recalculate
-			SaveAllocations();
 			RecalculateBonuses();
 
 			return true;
@@ -134,7 +167,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 				treeAllocations[treeId].Remove(nodeId);
 
 			// Save and recalculate
-			SaveAllocations();
 			RecalculateBonuses();
 
 			return true;
@@ -172,7 +204,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			// Clear allocations
 			treeAllocations[treeId].Clear();
-			SaveAllocations();
 			RecalculateBonuses();
 		}
 
@@ -205,7 +236,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			// Clear all allocations
 			treeAllocations.Clear();
-			SaveAllocations();
+			RecalculateBonuses();
+		}
+
+		/// <summary>
+		/// Drop every allocation without refunding anything. Only for the schema migration, which
+		/// rebuilds the point economy from the player's level immediately afterwards — any other
+		/// caller wants ResetAllTrees, which refunds.
+		/// </summary>
+		public void WipeAllocations()
+		{
+			treeAllocations.Clear();
 			RecalculateBonuses();
 		}
 
@@ -282,17 +323,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 		#region Mastery Loadout
 
-		// The mastery-loadout view (MasteryLoadoutPanel) uses these instead of the tree-style
-		// AllocateNode/DeallocateNode above: masteries are gated by a fixed number of slots and the
-		// shared point pool, NOT by a prerequisite web. Prerequisites in the JSON are ignored here.
+		// The mastery view uses these instead of the tree-style AllocateNode/DeallocateNode above:
+		// masteries are gated ONLY by the shared point pool, not by a prerequisite web and no longer
+		// by a slot count either. Prerequisites in the JSON are ignored here.
+		//
+		// The old 6-slot cap is gone. It used to be the only limit that mattered, and it capped
+		// effective spend at roughly 25-30 of the 99 points a character earns — the rest were
+		// unspendable. Masteries now compete with attributes for the same pool, which is a real
+		// constraint on its own: maxing every mastery costs more points than a character ever earns.
+		// The six fixed slots that remain are the boss-gated talent slots, which are a separate
+		// system and cost no points.
 
 		/// <summary>
-		/// Number of masteries a player can have socketed at once.
-		/// </summary>
-		public const int MasterySlotCount = 6;
-
-		/// <summary>
-		/// Number of masteries currently socketed (allocated at tier &gt; 0) in a tree.
+		/// Number of masteries currently ranked (allocated at tier &gt; 0) in a tree.
 		/// </summary>
 		public int GetSocketedCount(string treeId)
 		{
@@ -306,14 +349,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 					count++;
 			}
 			return count;
-		}
-
-		/// <summary>
-		/// Whether there is a free mastery slot to socket a new mastery into.
-		/// </summary>
-		public bool CanSocketNew(string treeId)
-		{
-			return GetSocketedCount(treeId) < MasterySlotCount;
 		}
 
 		/// <summary>
@@ -336,10 +371,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			if (currentTier >= node.MaxTier)
 				return false;
 
-			// Socketing a brand-new mastery requires a free slot.
-			if (currentTier == 0 && !CanSocketNew(treeId))
-				return false;
-
 			// Spend the points.
 			PassivePointManager pointManager = Player.GetModPlayer<PassivePointManager>();
 			int cost = node.GetUpgradeCost(currentTier);
@@ -351,7 +382,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			treeAllocations[treeId][nodeId] = currentTier + 1;
 
-			SaveAllocations();
 			RecalculateBonuses();
 			return true;
 		}
@@ -381,7 +411,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			if (treeAllocations[treeId][nodeId] <= 0)
 				treeAllocations[treeId].Remove(nodeId);
 
-			SaveAllocations();
 			RecalculateBonuses();
 			return true;
 		}
@@ -406,7 +435,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			if (treeAllocations.ContainsKey(treeId))
 				treeAllocations[treeId].Remove(nodeId);
 
-			SaveAllocations();
 			RecalculateBonuses();
 		}
 
@@ -462,157 +490,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 		}
 
 		/// <summary>
-		/// Apply bonuses to player stats
+		/// Apply cached bonuses to player stats. Flats run before percents, so a percent bonus scales
+		/// the flat total as well as vanilla's — deliberate, and the reason Fortitude is worth having
+		/// alongside Strength rather than instead of it.
 		/// </summary>
 		private void ApplyBonusesToStats()
 		{
-			StatsManager statsManager = Player.GetModPlayer<StatsManager>();
-
-			// Apply bonuses to each stat
 			foreach (var flatBonus in cachedFlatBonuses)
-			{
-				ApplyFlatBonusToStat(statsManager, flatBonus.Key, flatBonus.Value);
-			}
+				StatApplier.ApplyFlat(Player, flatBonus.Key, flatBonus.Value);
 
 			foreach (var percentBonus in cachedPercentBonuses)
-			{
-				ApplyPercentBonusToStat(statsManager, percentBonus.Key, percentBonus.Value);
-			}
+				StatApplier.ApplyPercent(Player, percentBonus.Key, percentBonus.Value);
 		}
 
-		/// <summary>
-		/// Apply flat bonus to a specific stat
-		/// </summary>
-		private void ApplyFlatBonusToStat(StatsManager stats, string statName, float value)
-		{
-			// Note: This applies temporary bonuses each frame
-			// The bonuses are not permanently added via the AddX methods to avoid saving issues
 
-			switch (statName)
-			{
-				// Damage stats
-				case "MeleeDamage":
-					Player.GetDamage(DamageClass.Melee).Flat += value;
-					break;
-				case "MagicDamage":
-					Player.GetDamage(DamageClass.Magic).Flat += value;
-					break;
-				case "RangedDamage":
-					Player.GetDamage(DamageClass.Ranged).Flat += value;
-					break;
-				case "SummonDamage":
-					Player.GetDamage(DamageClass.Summon).Flat += value;
-					break;
-				case "GenericDamage":
-					Player.GetDamage(DamageClass.Generic).Flat += value;
-					break;
-				case "CritChance":
-					Player.GetCritChance(DamageClass.Generic) += (int)value;
-					break;
-				case "ArmorPenetration":
-					Player.GetArmorPenetration(DamageClass.Generic) += (int)value;
-					break;
-				case "MinionSlots":
-					Player.maxMinions += (int)value;
-					break;
-
-				// Defence stats
-				case "Defense":
-					Player.statDefense += (int)value;
-					break;
-				case "MaxHealth":
-					// Applied every PostUpdateMiscEffects, mirroring PlayerHealthManager's bonus HP.
-					Player.statLifeMax2 += (int)value;
-					break;
-				case "LifeRegen":
-					Player.lifeRegen += (int)value;
-					break;
-
-				// Tertiary stats
-				case "MovementSpeed":
-					Player.moveSpeed += value;
-					break;
-
-				// Shared "effect" stats via a flat node bonus (whole percent). Percent-bonus nodes use
-				// ApplyPercentBonusToStat (fraction ×100); both land as whole percents on the accumulator.
-				case "LifeLeech":
-					Player.GetModPlayer<CombatEffectStats>().LifeLeechPercent += value;
-					break;
-				case "Healing":
-					Player.GetModPlayer<CombatEffectStats>().HealingPercent += value;
-					break;
-				case "AilmentEffect":
-					Player.GetModPlayer<CombatEffectStats>().AilmentPercent += value;
-					break;
-				case "AreaEffect":
-					Player.GetModPlayer<CombatEffectStats>().AreaPercent += value;
-					break;
-			}
-		}
-
-		/// <summary>
-		/// Apply percent bonus to a specific stat
-		/// </summary>
-		private void ApplyPercentBonusToStat(StatsManager stats, string statName, float value)
-		{
-			switch (statName)
-			{
-				// Damage stats
-				case "MeleeDamage":
-					Player.GetDamage(DamageClass.Melee) *= 1f + value;
-					break;
-				case "MagicDamage":
-					Player.GetDamage(DamageClass.Magic) *= 1f + value;
-					break;
-				case "RangedDamage":
-					Player.GetDamage(DamageClass.Ranged) *= 1f + value;
-					break;
-				case "SummonDamage":
-					Player.GetDamage(DamageClass.Summon) *= 1f + value;
-					break;
-				case "GenericDamage":
-					Player.GetDamage(DamageClass.Generic) *= 1f + value;
-					break;
-				case "AttackSpeed":
-					Player.GetAttackSpeed(DamageClass.Generic) += value;
-					break;
-				case "ManaEfficiency":
-					Player.manaCost -= value;
-					if (Player.manaCost < 0f) Player.manaCost = 0f;
-					break;
-
-				// Defence stats
-				case "Endurance":
-					Player.endurance += value;
-					if (Player.endurance > 1f) Player.endurance = 1f;
-					break;
-
-				// Tertiary stats
-				case "Knockback":
-					Player.GetKnockback(DamageClass.Generic) += value;
-					break;
-				case "MovementSpeed":
-					Player.moveSpeed *= 1f + value;
-					break;
-
-				// Shared "effect" stats (leech/healing/ailment/area) — these don't map to a vanilla
-				// Player field; they accumulate on CombatEffectStats for notable passives to read.
-				// The tree stores percents as fractions (0.10 = 10%), so convert to the whole-percent
-				// convention the accumulator uses. (No tree node grants these yet; forward-looking.)
-				case "LifeLeech":
-					Player.GetModPlayer<CombatEffectStats>().LifeLeechPercent += value * 100f;
-					break;
-				case "Healing":
-					Player.GetModPlayer<CombatEffectStats>().HealingPercent += value * 100f;
-					break;
-				case "AilmentEffect":
-					Player.GetModPlayer<CombatEffectStats>().AilmentPercent += value * 100f;
-					break;
-				case "AreaEffect":
-					Player.GetModPlayer<CombatEffectStats>().AreaPercent += value * 100f;
-					break;
-			}
-		}
 
 		/// <summary>
 		/// Get total flat bonus for a specific stat
@@ -632,36 +523,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 		#endregion
 
-		#region Data Persistence
-
-		/// <summary>
-		/// Save allocations to player data
-		/// </summary>
-		private void SaveAllocations()
-		{
-			string json = JsonConvert.SerializeObject(treeAllocations);
-			PlayerDataManager.SetString(Player, ALLOCATIONS_KEY, json);
-		}
-
-		/// <summary>
-		/// Load allocations from player data
-		/// </summary>
-		private void LoadAllocations()
-		{
-			string json = PlayerDataManager.GetString(Player, ALLOCATIONS_KEY, "{}");
-			try
-			{
-				treeAllocations = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, int>>>(json);
-				if (treeAllocations == null)
-					treeAllocations = new Dictionary<string, Dictionary<string, int>>();
-			}
-			catch
-			{
-				treeAllocations = new Dictionary<string, Dictionary<string, int>>();
-			}
-		}
-
-		#endregion
 
 		#region Static Helpers
 

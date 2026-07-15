@@ -129,4 +129,9 @@ Buffs: {
 		Description: Mods.ProgressionExpanded.Buffs.StaggerDebuff.Description
 		DisplayName: Stagger Debuff
 	}
+
+	CursedSkullDebuff: {
+		Description: Mods.ProgressionExpanded.Buffs.CursedSkullDebuff.Description
+		DisplayName: Cursed Skull Debuff
+	}
 }

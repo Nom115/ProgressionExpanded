@@ -1,27 +1,27 @@
 {
   "TreeId": "warrior_tree",
-  "TreeName": "Path of the Warrior",
-  "Description": "Socket up to six masteries. Mix raw stats with notable combat procs that mirror the affixes your enemies use against you.",
+  "TreeName": "Masteries",
+  "Description": "Spend passive points to rank up masteries. They draw on the same pool as your attributes, so every rank here is a point of Strength, Dexterity or Intellect you gave up.",
   "Nodes": {
     "berserker": {
       "NodeId": "berserker",
       "DisplayName": "Berserker",
-      "Description": "Hone your melee craft for flat and scaling melee damage.",
+      "Description": "Hone your melee craft: increased melee damage.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "MeleeDamage": 2.0 },
-      "PercentBonuses": { "MeleeDamage": 0.03 }
+      "FlatBonuses": {},
+      "PercentBonuses": { "MeleeDamage": 0.05 }
     },
     "sharpshooter": {
       "NodeId": "sharpshooter",
       "DisplayName": "Sharpshooter",
-      "Description": "Steady your aim for flat and scaling ranged damage.",
+      "Description": "Steady your aim: increased ranged damage.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "RangedDamage": 2.0 },
-      "PercentBonuses": { "RangedDamage": 0.03 }
+      "FlatBonuses": {},
+      "PercentBonuses": { "RangedDamage": 0.05 }
     },
     "arcane_focus": {
       "NodeId": "arcane_focus",
@@ -31,7 +31,7 @@
       "PointsPerTier": 1,
       "Prerequisites": [],
       "FlatBonuses": {},
-      "PercentBonuses": { "MagicDamage": 0.03, "ManaEfficiency": 0.02 }
+      "PercentBonuses": { "MagicDamage": 0.05, "ManaEfficiency": 0.02 }
     },
     "swarm_commander": {
       "NodeId": "swarm_commander",
@@ -41,17 +41,17 @@
       "PointsPerTier": 1,
       "Prerequisites": [],
       "FlatBonuses": { "MinionSlots": 1.0 },
-      "PercentBonuses": { "SummonDamage": 0.03 }
+      "PercentBonuses": { "SummonDamage": 0.05 }
     },
     "warlord": {
       "NodeId": "warlord",
       "DisplayName": "Warlord",
-      "Description": "All-round martial prowess: flat and scaling damage of every kind.",
+      "Description": "All-round martial prowess: increased damage of every kind.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "GenericDamage": 3.0 },
-      "PercentBonuses": { "GenericDamage": 0.02 }
+      "FlatBonuses": {},
+      "PercentBonuses": { "GenericDamage": 0.04 }
     },
     "deadly_precision": {
       "NodeId": "deadly_precision",
@@ -96,22 +96,22 @@
     "ironhide": {
       "NodeId": "ironhide",
       "DisplayName": "Ironhide",
-      "Description": "Toughen your hide for extra defense.",
+      "Description": "Toughen your hide: increased defense. Scales with your armour, so it stays worth the same as you upgrade.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "Defense": 4.0 },
-      "PercentBonuses": {}
+      "FlatBonuses": {},
+      "PercentBonuses": { "DefensePercent": 0.10 }
     },
-    "juggernaut": {
-      "NodeId": "juggernaut",
-      "DisplayName": "Juggernaut",
-      "Description": "Become an unstoppable wall of health: +20 max HP per tier.",
+    "fortitude": {
+      "NodeId": "fortitude",
+      "DisplayName": "Fortitude",
+      "Description": "Increased maximum life. Multiplies the life your Strength grants rather than competing with it.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "MaxHealth": 20.0 },
-      "PercentBonuses": {}
+      "FlatBonuses": {},
+      "PercentBonuses": { "MaxLifePercent": 0.04 }
     },
     "stoneskin": {
       "NodeId": "stoneskin",
@@ -130,8 +130,8 @@
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
-      "FlatBonuses": { "LifeRegen": 2.0 },
-      "PercentBonuses": {}
+      "FlatBonuses": {},
+      "PercentBonuses": { "LifeRegenPercent": 0.25 }
     },
     "fleet_footed": {
       "NodeId": "fleet_footed",
@@ -142,16 +142,6 @@
       "Prerequisites": [],
       "FlatBonuses": {},
       "PercentBonuses": { "MovementSpeed": 0.04 }
-    },
-    "stagger_notable": {
-      "NodeId": "stagger_notable",
-      "DisplayName": "Stagger",
-      "Description": "Notable: a portion of damage you take is redirected into a damage-over-time bleed instead of hitting all at once. Tier 1: 40% over 4s | Tier 2: 45% over 4.5s | Tier 3: 50% over 5s | Tier 4: 55% over 5.5s",
-      "MaxTier": 4,
-      "PointsPerTier": 1,
-      "Prerequisites": [],
-      "FlatBonuses": {},
-      "PercentBonuses": {}
     },
     "rend_notable": {
       "NodeId": "rend_notable",
@@ -206,7 +196,7 @@
     "bloodthirst_notable": {
       "NodeId": "bloodthirst_notable",
       "DisplayName": "Bloodthirst",
-      "Description": "Notable: landing a hit heals you for (2 + tier) HP, a few times per second.",
+      "Description": "Notable: leech 2% of the damage you deal as life per tier (8% at max), a few times per second. Scales with your weapon, so it never falls off.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
