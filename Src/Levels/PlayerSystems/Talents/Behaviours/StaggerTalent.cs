@@ -13,10 +13,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// swing your survival or damage about as far as this does, it is not big enough to be one of
 	/// only six picks. It is fixed at what used to be the tier-4 form; there are no ranks any more.
 	///
-	/// It does not reduce damage. It buys you a window. Everything hits eventually, so Stagger only
-	/// pays off if you can out-heal or out-run the bleed — which is why Fleshless (no regeneration)
-	/// is a trap next to it, and why Vengeance, which wants damage to land hard and fast, is its
-	/// opposite number in the same slot.
+	/// The stagger itself does not reduce damage — it buys you a window. Everything hits eventually,
+	/// so it only pays off if you can out-heal or out-run the bleed, which is why Fleshless (no
+	/// regeneration) is a trap next to it, and why Vengeance, which wants damage to land hard and
+	/// fast, is its opposite number in the same slot. The defense and flat life are separate: they
+	/// shrink the hit BEFORE it is split, so they make the window easier to answer rather than
+	/// longer.
 	/// </summary>
 	public class StaggerTalent : TalentBehaviour
 	{
@@ -25,11 +27,38 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Stagger";
 
 		public override string Description =>
-			"55% of the damage you take is dealt to you over 5.5 seconds instead of all at once. "
-			+ "It is delayed, not prevented — you need to answer it.";
+			"150% more defense and +150 maximum life. 55% of the damage you take is dealt to you over "
+			+ "5.5 seconds instead of all at once. It is delayed, not prevented — you need to answer it.";
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
+		private const float DefenseBonus = 1.50f;
+		private const float FlatLife = 150f;
+
+		/// <summary>
+		/// DefensePercent multiplies a Player.DefenseStat, which tracks adds and multiplies
+		/// separately — so this is genuinely "more" defense and compounds with Bone Armor (x1.5) and
+		/// Avatar of Flesh (x1.5) rather than summing with them. Worth watching in play: that stack
+		/// reaches roughly x5.6 defense, and Bone Armor converts defense into flat damage, so this
+		/// talent feeds that pick's offence as well as its own defence.
+		/// </summary>
+		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>
+		{
+			{ "DefensePercent", DefenseBonus },
+		};
+
+		/// <summary>
+		/// MaxHealth routes to StatModifier.Base in TalentPlayer.ModifyMaxStats — inside the
+		/// multipliers, so % life bonuses scale it. Flat would sit outside them and silently exclude
+		/// this 150 from every % life bonus in the game.
+		/// </summary>
+		private static readonly Dictionary<string, float> flatBonuses = new Dictionary<string, float>
+		{
+			{ "MaxHealth", FlatLife },
+		};
+
+		public override IReadOnlyDictionary<string, float> PercentBonuses => percentBonuses;
+		public override IReadOnlyDictionary<string, float> FlatBonuses => flatBonuses;
 
 		/// <summary>Backstop on concurrent instances. See ModifyHurt for why the check lives there.</summary>
 		private const int MaxInstances = 10;

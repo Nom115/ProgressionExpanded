@@ -10,10 +10,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 	/// healing effectiveness, on-hit ailment effect, and area-of-effect.
 	///
 	/// Both item modifiers (via <c>ItemModifierApplier</c>) and passive-tree nodes (via
-	/// <c>PassiveTreeManager.ApplyPercentBonusToStat</c>) add into these each frame; the notable
-	/// passives (Bloodthirst, the on-hit ailments, Detonate) read them when computing their effect,
-	/// so gear/passives can scale an effect <b>past its tier ceiling</b> — and it is generic, not
-	/// tied 1:1 to any single passive.
+	/// <c>PassiveTreeManager.ApplyPercentBonusToStat</c>) add into these each frame; the effects
+	/// themselves (<c>LifeLeechApplier</c>, the on-hit ailments, Detonate) read them when computing
+	/// their result, so gear/passives can scale an effect <b>past its tier ceiling</b> — and it is
+	/// generic, not tied 1:1 to any single passive.
+	///
+	/// Each field needs a consumer that runs whether or not any particular passive is allocated.
+	/// LifeLeechPercent used to be read ONLY inside Bloodthirst, which quietly made leech rolled onto
+	/// an item do nothing at all unless that one mastery happened to be allocated. If you add a field
+	/// here, give it an owner — an accumulator with a conditional reader is a stat that lies.
 	///
 	/// Convention: values are WHOLE PERCENTS (e.g. <see cref="LifeLeechPercent"/> == 3 means 3%);
 	/// consumers divide by 100. This ModPlayer persists NOTHING — it is fully recomputed every frame
@@ -22,7 +27,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 	/// </summary>
 	public class CombatEffectStats : ModPlayer
 	{
-		/// <summary>Percent of damage dealt returned as health on hit (read by leech passives).</summary>
+		/// <summary>
+		/// Percent of damage dealt returned as health on hit. Every leech source in the mod (gear
+		/// modifiers, Bloodthirst, Devourer, Vengeance) pools into this one number, and
+		/// <see cref="LifeLeechApplier"/> is its sole consumer — it owns the cooldown and the
+		/// per-hit cap. Add here to grant leech; do not write another on-hit heal.
+		/// </summary>
 		public float LifeLeechPercent;
 
 		/// <summary>Percent increase to healing you receive (our heal procs + potions).</summary>

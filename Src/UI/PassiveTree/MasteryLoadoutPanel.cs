@@ -143,8 +143,16 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 			if (pointManager != null && treeManager != null)
 			{
-				infoText.SetText(
-					$"Available: {pointManager.GetAvailablePoints()} pts   |   Masteries ranked: {treeManager.GetSocketedCount(treeId)}");
+				// The attribute line is what tells the player why the next mastery is locked without
+				// making them hover a row to find out. Suppressed once they can already afford it —
+				// a satisfied requirement is just noise.
+				string info =
+					$"Available: {pointManager.GetAvailablePoints()} pts   |   Masteries ranked: {treeManager.GetSocketedCount(treeId)}";
+
+				if (!treeManager.CanSocketNewMastery(out int required, out int current))
+					info += $"   |   Next mastery: {current}/{required} attributes";
+
+				infoText.SetText(info);
 			}
 		}
 
@@ -232,7 +240,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			available.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.Ordinal));
 
 			foreach (PassiveNode node in available)
-				pickerList.Add(new MasteryPickerRow(this, node, pointManager));
+				pickerList.Add(new MasteryPickerRow(this, node, pointManager, treeManager));
 		}
 
 		#endregion
@@ -467,9 +475,24 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 	{
 		private readonly MasteryLoadoutPanel owner;
 		private readonly PassiveNode node;
+
+		/// <summary>Can pay the point cost.</summary>
 		private readonly bool affordable;
 
-		public MasteryPickerRow(MasteryLoadoutPanel owner, PassiveNode node, PassivePointManager pointManager)
+		/// <summary>Lacks the attributes to hold another mastery. Distinct from unaffordable: more
+		/// points will never fix it, so it needs its own colour and its own tooltip.</summary>
+		private readonly bool locked;
+
+		private readonly string lockReason;
+
+		/// <summary>Both gates pass — the only state that can actually be clicked.</summary>
+		private bool Selectable => affordable && !locked;
+
+		public MasteryPickerRow(
+			MasteryLoadoutPanel owner,
+			PassiveNode node,
+			PassivePointManager pointManager,
+			PassiveTreeManager treeManager)
 		{
 			this.owner = owner;
 			this.node = node;
@@ -477,16 +500,28 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			int cost = node.GetUpgradeCost(0);
 			this.affordable = pointManager != null && pointManager.HasEnoughPoints(cost);
 
+			// Every row in this picker is an unranked node, so socketing any of them is always a NEW
+			// distinct mastery — the gate applies to all of them equally, and the requirement shown
+			// is the same on each.
+			int required = 0, current = 0;
+			this.locked = treeManager != null && !treeManager.CanSocketNewMastery(out required, out current);
+			this.lockReason = locked
+				? $"{node.DisplayName}\nLocked — needs {required} total attribute points ({current}/{required})\n"
+					+ "Each mastery past your first costs 10 more attributes than the last."
+				: null;
+
 			Width.Set(0, 1f);
 			Height.Set(64f, 0f);
 			SetPadding(8f);
-			BackgroundColor = (affordable ? new Color(40, 52, 88) : new Color(30, 34, 50)) * 0.95f;
-			BorderColor = affordable ? MasteryLoadoutPanel.CategoryColor(node) : new Color(60, 60, 70);
+			BackgroundColor = (Selectable ? new Color(40, 52, 88) : new Color(30, 34, 50)) * 0.95f;
+			BorderColor = locked
+				? new Color(90, 50, 50)
+				: (affordable ? MasteryLoadoutPanel.CategoryColor(node) : new Color(60, 60, 70));
 
 			UIText name = new UIText(node.DisplayName, 0.95f);
 			name.Left.Set(2, 0f);
 			name.Top.Set(2, 0f);
-			if (!affordable)
+			if (!Selectable)
 				name.TextColor = new Color(150, 150, 160);
 			Append(name);
 
@@ -496,10 +531,12 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			effect.TextColor = new Color(170, 180, 205);
 			Append(effect);
 
-			UIText costText = new UIText($"{cost} pt", 0.85f);
+			// The point cost is irrelevant while locked — showing "1 pt" next to a row you cannot buy
+			// at any price reads as the wrong explanation, so state the real one.
+			UIText costText = new UIText(locked ? $"{required} attrib" : $"{cost} pt", 0.85f);
 			costText.HAlign = 1f;
 			costText.VAlign = 0.5f;
-			costText.TextColor = affordable ? new Color(120, 230, 120) : new Color(220, 120, 120);
+			costText.TextColor = Selectable ? new Color(120, 230, 120) : new Color(220, 120, 120);
 			Append(costText);
 		}
 
@@ -515,7 +552,7 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		public override void LeftClick(UIMouseEvent evt)
 		{
 			base.LeftClick(evt);
-			if (affordable)
+			if (Selectable)
 				owner.SocketMastery(node);
 			else
 				SoundEngine.PlaySound(SoundID.MenuClose);
@@ -524,15 +561,26 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		public override void MouseOver(UIMouseEvent evt)
 		{
 			base.MouseOver(evt);
-			if (affordable)
+			if (Selectable)
 				BackgroundColor = new Color(56, 72, 116) * 0.98f;
 		}
 
 		public override void MouseOut(UIMouseEvent evt)
 		{
 			base.MouseOut(evt);
-			if (affordable)
+			if (Selectable)
 				BackgroundColor = new Color(40, 52, 88) * 0.95f;
+		}
+
+		public override void Draw(SpriteBatch spriteBatch)
+		{
+			base.Draw(spriteBatch);
+
+			// Routed through the owner rather than drawn here so it lands outside the list's clip
+			// region. A locked row that just refused the click without saying why is the worst
+			// version of this feature.
+			if (locked && IsMouseHovering)
+				owner.SetHoverTooltip(lockReason);
 		}
 	}
 

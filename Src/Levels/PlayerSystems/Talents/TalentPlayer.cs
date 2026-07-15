@@ -294,6 +294,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 						health += pctLife;
 					if (behaviour.PercentBonuses.TryGetValue("MaxManaPercent", out float pctMana))
 						mana += pctMana;
+
+					// "More" life, as distinct from "increased" above. StatModifier resolves as
+					// (statMax + Base) * Additive * Multiplicative + Flat, so += lands in Additive
+					// and sums with every other % life source, while *= lands in Multiplicative and
+					// compounds with them. tML's CombineWith multiplies Multiplicative across
+					// ModPlayers, so this still compounds against AttributeManager's and
+					// PassiveTreeManager's contributions rather than being flattened into them.
+					if (behaviour.PercentBonuses.TryGetValue("MaxLifeMore", out float moreLife))
+						health *= 1f + moreLife;
 				}
 
 				behaviour.ModifyMaxStats(Player, ref health, ref mana);

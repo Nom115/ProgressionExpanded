@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.Audio;
@@ -83,58 +84,33 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			+ "Killing an enemy restores 8% of your maximum life.";
 
 		private const float LeechFraction = 0.12f;
-		private const float MaxLeechPerHit = 0.15f;
 		private const float KillHealFraction = 0.08f;
-		private const int LeechCooldownTicks = 12;
 
-		private int leechCooldown;
-
-		public override void PostUpdate(Player player)
+		/// <summary>
+		/// The on-hit leech is declarative so it pools with every other leech source (gear,
+		/// Bloodthirst, Vengeance) into one capped payout in LifeLeechApplier. This used to be a
+		/// bespoke OnHitNPC heal with its own cooldown, which meant a Devourer + Vengeance player
+		/// would proc TWO independent leech heals per hit and neither cap would see the other.
+		///
+		/// Fraction, not whole percent — StatApplier's percent path multiplies by 100 on the way in.
+		/// </summary>
+		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>
 		{
-			if (leechCooldown > 0)
-				leechCooldown--;
-		}
+			{ "LifeLeech", LeechFraction },
+		};
 
-		public override void OnHitNPC(Player player, NPC target, NPC.HitInfo hit, int damageDone)
-		{
-			if (leechCooldown > 0 || target.friendly || target.lifeMax <= 5)
-				return;
-
-			if (player.statLife >= player.statLifeMax2)
-				return;
-
-			int heal = (int)Math.Round(damageDone * LeechFraction);
-			int cap = Math.Max(1, (int)(player.statLifeMax2 * MaxLeechPerHit));
-			if (heal > cap)
-				heal = cap;
-
-			if (Heal(player, heal))
-				leechCooldown = LeechCooldownTicks;
-		}
+		public override IReadOnlyDictionary<string, float> PercentBonuses => percentBonuses;
 
 		public override void OnKillNPC(Player player, NPC target)
 		{
-			// Deliberately not cooldowned: kills are their own rate limit, and the burst on a kill is
-			// what makes this feel like devouring rather than sipping.
-			if (target.friendly || target.lifeMax <= 5)
+			// The kill burst stays bespoke: it is a fraction of MAX LIFE, not of damage dealt, so it
+			// is not a leech and has no business in the leech pool. Deliberately not cooldowned —
+			// kills are their own rate limit, and the burst is what makes this feel like devouring
+			// rather than sipping.
+			if (!LifeLeechApplier.IsLeechableTarget(target))
 				return;
 
-			Heal(player, (int)(player.statLifeMax2 * KillHealFraction));
-		}
-
-		private static bool Heal(Player player, int amount)
-		{
-			if (amount <= 0)
-				return false;
-
-			int newLife = Math.Min(player.statLifeMax2, player.statLife + amount);
-			int healed = newLife - player.statLife;
-			if (healed <= 0)
-				return false;
-
-			player.statLife = newLife;
-			player.HealEffect(healed);
-			return true;
+			LifeLeechApplier.Heal(player, (int)(player.statLifeMax2 * KillHealFraction));
 		}
 	}
 

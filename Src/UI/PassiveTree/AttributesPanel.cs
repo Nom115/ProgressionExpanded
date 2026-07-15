@@ -102,7 +102,9 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 		public void Refund(PlayerAttribute attribute)
 		{
-			if (AttributeManager.Get(Main.LocalPlayer).TryRefund(attribute))
+			AttributeManager attributes = AttributeManager.Get(Main.LocalPlayer);
+
+			if (attributes.TryRefund(attribute))
 			{
 				SoundEngine.PlaySound(SoundID.MenuTick);
 				RebuildRows();
@@ -111,6 +113,18 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			else
 			{
 				SoundEngine.PlaySound(SoundID.MenuClose);
+
+				// A refund can now be declined for a reason the player cannot see — their masteries
+				// require the attributes they are trying to take back. Without this the button just
+				// clicks and does nothing. Only speak up when that is actually the cause; a refund
+				// refused because the attribute is already at zero is self-evident.
+				if (attributes.Get(attribute) > 0
+					&& !attributes.CanRefundWithoutOrphaningMasteries(1, out int required))
+				{
+					Main.NewText(
+						$"Your masteries require {required} attribute points. Drop a mastery before refunding.",
+						new Color(220, 120, 120));
+				}
 			}
 		}
 	}

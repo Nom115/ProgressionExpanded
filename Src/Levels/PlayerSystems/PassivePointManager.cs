@@ -4,6 +4,7 @@ using Terraria.ID;
 using Terraria.ModLoader;
 using ProgressionExpanded.Src.Levels.PlayerSystems.Attributes;
 using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 using ProgressionExpanded.Utils.DataManagers;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems
@@ -26,9 +27,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 		/// <summary>
 		/// Bump when a change invalidates existing allocations. Characters below this get a one-shot
-		/// wipe-and-refund on load (see RunSchemaMigration). v2 = attributes + boss-gated talent slots.
+		/// wipe-and-refund on load (see RunSchemaMigration).
+		///
+		/// v2 = attributes + boss-gated talent slots.
+		/// v3 = pinnacle rebalance + masteries gated on total attribute points. The wipe is not
+		///      cosmetic here: the gate makes states a v2 save can freely be in (eight masteries,
+		///      zero attributes) unreachable, so those allocations have to be rebuilt under the new
+		///      rule rather than grandfathered.
 		/// </summary>
-		private const int SCHEMA_VERSION = 2;
+		private const int SCHEMA_VERSION = 3;
 
 		private int availablePoints = 0;
 		private int totalPointsEarned = 0;
@@ -79,6 +86,14 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			Player.GetModPlayer<PassiveTreeManager>().WipeAllocations();
 			Player.GetModPlayer<AttributeManager>().WipeAll();
 
+			// All three pinnacle choices were redefined in v3, so the pick a player made no longer
+			// describes the talent they now have — someone who took Juggernaut for double life would
+			// silently be holding a half-life, half-speed armour talent instead. Only this slot is
+			// cleared: the other five slots' talents are untouched, and clearing them would be
+			// busywork rather than a re-decision. ClearSlot fires OnDeactivate, so an in-flight
+			// Stagger bleed tears itself down cleanly rather than outliving the pick.
+			Player.GetModPlayer<TalentPlayer>().ClearSlot("pinnacle");
+
 			// Allocations used to live in PlayerDataManager's string dictionary. They have their own
 			// TagCompound now, so the old key is orphaned data that would otherwise ride along in
 			// every save forever.
@@ -100,7 +115,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			if (Main.netMode != NetmodeID.Server && totalPointsEarned > 0)
 			{
 				Main.NewText(
-					$"Progression Expanded has been reworked — {totalPointsEarned} passive points refunded. Press P to respend them.",
+					$"Progression Expanded has been rebalanced — {totalPointsEarned} passive points refunded, "
+					+ "and your Pinnacle talent has been cleared to re-pick. Press P.",
+					new Color(255, 215, 0));
+				Main.NewText(
+					"New: each mastery past your first requires 10 more total attribute points than the last.",
 					new Color(255, 215, 0));
 			}
 		}

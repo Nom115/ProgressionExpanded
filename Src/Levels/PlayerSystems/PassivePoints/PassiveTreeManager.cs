@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Terraria;
 using Terraria.ModLoader;
 using Newtonsoft.Json;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Attributes;
 using ProgressionExpanded.Src.Levels.PlayerSystems.Stats;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
@@ -351,9 +352,66 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			return count;
 		}
 
+		#region Attribute gate on breadth
+
+		/// <summary>Attribute points required per additional mastery beyond the first.</summary>
+		public const int AttributesPerExtraMastery = 10;
+
+		/// <summary>
+		/// Distinct masteries ranked across every tree. Mirrors GetTotalSpentAcrossTrees: the gate
+		/// needs ONE unambiguous count, and making it tree-spanning means callers (including
+		/// AttributeManager, which has no idea which tree the player's class maps to) never have to
+		/// plumb a treeId through. Only one tree exists today, so this equals GetSocketedCount for
+		/// that tree; if a character ever holds allocations in two, counting both is the conservative
+		/// reading rather than letting a second tree's masteries slip the gate.
+		/// </summary>
+		public int GetSocketedCountAcrossTrees()
+		{
+			int count = 0;
+			foreach (var tree in treeAllocations)
+			{
+				foreach (var entry in tree.Value)
+				{
+					if (entry.Value > 0)
+						count++;
+				}
+			}
+			return count;
+		}
+
+		/// <summary>
+		/// Total attribute points needed to hold <paramref name="masteryOrdinal"/> distinct masteries
+		/// (1-based). The first is free; each one after costs 10 more than the last — 2nd needs 10,
+		/// 3rd needs 20, 4th needs 30. Breadth is what attributes buy.
+		/// </summary>
+		public static int AttributeRequirementFor(int masteryOrdinal)
+		{
+			int required = (masteryOrdinal - 1) * AttributesPerExtraMastery;
+			return required < 0 ? 0 : required;
+		}
+
+		/// <summary>
+		/// Whether the player has the attributes to socket one MORE distinct mastery. Non-mutating —
+		/// AllocateMastery is try-and-see, so this is what the UI asks in order to render a locked
+		/// row, the same way HasEnoughPoints backs SpendPoints.
+		///
+		/// Gates on TOTAL attribute points (Str+Dex+Int), not Strength: Juggernaut already makes
+		/// Dexterity and Intellect dead stats, so a Strength-only gate would hand the pinnacle pick
+		/// that was already dominant a free bonus to build breadth as well.
+		/// </summary>
+		public bool CanSocketNewMastery(out int required, out int current)
+		{
+			required = AttributeRequirementFor(GetSocketedCountAcrossTrees() + 1);
+			current = Player.GetModPlayer<AttributeManager>().GetTotalSpentOnAttributes();
+			return current >= required;
+		}
+
+		#endregion
+
 		/// <summary>
 		/// Socket a mastery (if not already socketed) or rank it up one tier. Ignores prerequisites.
-		/// Socketing a new mastery requires a free slot; ranking an existing one does not.
+		/// Socketing a NEW mastery requires enough total attribute points (see CanSocketNewMastery);
+		/// ranking an already-socketed one does not, since it does not change how many you hold.
 		/// </summary>
 		public bool AllocateMastery(string treeId, string nodeId)
 		{
@@ -369,6 +427,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 
 			// Already maxed.
 			if (currentTier >= node.MaxTier)
+				return false;
+
+			// Breadth gate — checked BEFORE spending, because SpendPoints mutates. Every later
+			// early-out in this method would otherwise return false with the point already deducted
+			// and no allocation to show for it.
+			if (currentTier == 0 && !CanSocketNewMastery(out _, out _))
 				return false;
 
 			// Spend the points.

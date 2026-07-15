@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.ModLoader;
 using Terraria.ModLoader.IO;
+using ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints;
 using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.Attributes
@@ -102,10 +103,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Attributes
 
 		/// <summary>
 		/// Take a point back out of an attribute and return it to the pool.
+		///
+		/// Declined if it would drop the player below the attribute requirement for the masteries
+		/// they already hold. Without this the breadth gate is free to bypass: socket six masteries
+		/// at 50 attribute points, refund all 50, and keep both the masteries and the points.
+		/// Deallocate a mastery first — that is the trade the gate exists to charge for.
 		/// </summary>
 		public bool TryRefund(PlayerAttribute attribute, int amount = 1)
 		{
 			if (amount <= 0 || Get(attribute) < amount)
+				return false;
+
+			if (!CanRefundWithoutOrphaningMasteries(amount, out _))
 				return false;
 
 			Add(attribute, -amount);
@@ -114,7 +123,25 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Attributes
 		}
 
 		/// <summary>
+		/// Whether refunding <paramref name="amount"/> attribute points keeps the player at or above
+		/// the requirement for their currently socketed masteries. Non-mutating, so the UI can grey
+		/// out a refund button and say why rather than letting the click silently no-op.
+		/// </summary>
+		public bool CanRefundWithoutOrphaningMasteries(int amount, out int required)
+		{
+			PassiveTreeManager treeManager = Player.GetModPlayer<PassiveTreeManager>();
+			required = PassiveTreeManager.AttributeRequirementFor(treeManager.GetSocketedCountAcrossTrees());
+			return GetTotalSpentOnAttributes() - amount >= required;
+		}
+
+		/// <summary>
 		/// Refund every invested attribute point back to the pool.
+		///
+		/// Deliberately NOT gated by the mastery requirement, unlike TryRefund. Its only caller is
+		/// PassiveTreeUIState.RespecPoints, which resets the tree BEFORE calling this — so masteries
+		/// are already at zero, the requirement is already zero, and a guard here would be dead code
+		/// at best. That ordering is load-bearing: reverse it and a full respec would refuse to
+		/// refund the attributes that its own masteries were requiring.
 		/// </summary>
 		public void RefundAll()
 		{
