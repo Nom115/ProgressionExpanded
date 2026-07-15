@@ -119,6 +119,11 @@ Configs: {
 			Label: Health Bar Scale
 			Tooltip: ""
 		}
+
+		HideVanillaMana: {
+			Tooltip: ""
+			Label: Hide Vanilla Mana
+		}
 	}
 }
 
