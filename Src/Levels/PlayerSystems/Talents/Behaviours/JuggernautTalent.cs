@@ -12,10 +12,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// compounds against them. Juggernaut used to be the default pick on raw life alone; the
 	/// defense is what it trades for, and it pays in mobility.
 	///
-	/// It also kills two of your three attributes: Dexterity does nothing (attack speed cannot be
-	/// increased) and Intellect does nothing (no mana). Since the mastery gate now keys off TOTAL
-	/// attribute points rather than Strength, that dead weight is a real cost to build breadth and
-	/// not just to the stat line.
+	/// It also kills two of your three attributes outright — Dexterity and Intellect grant nothing at
+	/// all, neither their attack-speed/mana line nor their damage line. Since the mastery gate keys
+	/// off TOTAL attribute points rather than Strength, that dead weight is a real cost to build
+	/// breadth and not just to the stat line.
+	///
+	/// The damage suppression is not incidental. When attributes gained an offensive line, leaving
+	/// these flags narrow would have quietly handed a ranged Juggernaut a live Dexterity and softened
+	/// the one cost that stops this pick reading as strictly-best. Juggernaut is Strength's build; the
+	/// other two staying dead is the price of the wall.
 	///
 	/// The suppression is declared via Suppresses rather than enforced here. Contributors ask
 	/// TalentPlayer.Suppresses(...) before applying themselves, which means there is no dependency
@@ -29,8 +34,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override string Description =>
 			"+50% maximum life. 50% more defense. 65% more damage. -15% attack speed, and attack speed "
-			+ "cannot be increased. -50% movement speed. You permanently have no mana, and Intellect "
-			+ "grants none.";
+			+ "cannot be increased. -50% movement speed. You permanently have no mana. Dexterity and "
+			+ "Intellect grant you nothing.";
 
 		private const float LifeBonus = 0.50f;
 		private const float DefenseBonus = 0.50f;
@@ -60,7 +65,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override IReadOnlyDictionary<string, float> PercentBonuses => percentBonuses;
 
 		public override TalentSuppression Suppresses =>
-			TalentSuppression.AttackSpeedIncreases | TalentSuppression.ManaFromIntellect;
+			TalentSuppression.AttackSpeedIncreases | TalentSuppression.ManaFromIntellect
+			| TalentSuppression.DamageFromDexterity | TalentSuppression.DamageFromIntellect;
 
 		public override void PostUpdateMiscEffects(Player player)
 		{

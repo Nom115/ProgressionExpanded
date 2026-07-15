@@ -93,7 +93,7 @@ namespace ProgressionExpanded.Src.NPCs
 
 			// Overworld hugs the world level; depth and danger biomes bias the offset upward so deep
 			// caverns / the Dungeon / evil / Jungle approach +MAX_LEVEL_OFFSET. Clamped to ±6.
-			float depthFrac = GetDepthFraction(npc);
+			float depthFrac = BiomeDepth.GetDepthFraction(npc);
 			float biomeBonus = GetBiomeBonus(npc);
 			float upwardBias = System.Math.Clamp(depthFrac * DEPTH_WEIGHT + biomeBonus, 0f, 1f);
 
@@ -106,26 +106,13 @@ namespace ProgressionExpanded.Src.NPCs
 		}
 
 		/// <summary>
-		/// 0 at or above the surface line, ramping linearly to 1 near the underworld. Drives the
-		/// "deeper = higher level" bias.
-		/// </summary>
-		private static float GetDepthFraction(Terraria.NPC npc)
-		{
-			float tileY = npc.Center.Y / 16f;
-			float surface = (float)Main.worldSurface;
-			float bottom = Main.maxTilesY - 200f; // start of the underworld; deepest meaningful layer
-			if (bottom <= surface) return 0f;      // guard against tiny / degenerate worlds
-			return System.Math.Clamp((tileY - surface) / (bottom - surface), 0f, 1f);
-		}
-
-		/// <summary>
 		/// Upward level bias from the local biome, read from the nearest active player (reusing the
 		/// mod's existing "nearest player within range → read Zone*" idiom). Returns the strongest
 		/// applicable bonus, or 0 for open ground / no player near.
 		/// </summary>
 		private static float GetBiomeBonus(Terraria.NPC npc)
 		{
-			Terraria.Player player = NearestPlayer(npc, BIOME_BONUS_RANGE);
+			Terraria.Player player = BiomeDepth.NearestPlayer(npc, BIOME_BONUS_RANGE);
 			if (player == null) return 0f;
 
 			float bonus = 0f;
@@ -133,25 +120,6 @@ namespace ProgressionExpanded.Src.NPCs
 			if (player.ZoneCorrupt || player.ZoneCrimson) bonus = System.Math.Max(bonus, EVIL_BONUS);
 			if (player.ZoneJungle) bonus = System.Math.Max(bonus, JUNGLE_BONUS);
 			return bonus;
-		}
-
-		/// <summary>Nearest active, living player to the NPC within maxRange px, or null.</summary>
-		private static Terraria.Player NearestPlayer(Terraria.NPC npc, float maxRange)
-		{
-			Terraria.Player nearest = null;
-			float nearestDistSq = maxRange * maxRange;
-			for (int i = 0; i < Main.maxPlayers; i++)
-			{
-				Terraria.Player p = Main.player[i];
-				if (p == null || !p.active || p.dead) continue;
-				float distSq = Vector2.DistanceSquared(p.Center, npc.Center);
-				if (distSq <= nearestDistSq)
-				{
-					nearestDistSq = distSq;
-					nearest = p;
-				}
-			}
-			return nearest;
 		}
 
 		#endregion

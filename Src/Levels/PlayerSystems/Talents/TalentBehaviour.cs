@@ -23,6 +23,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 		None = 0,
 		ManaFromIntellect = 1 << 0,
 		AttackSpeedIncreases = 1 << 1,
+
+		// Each attribute grants damage as well as its defensive/utility line, so killing Dexterity
+		// and Intellect takes two flags each. Kept attribute-specific rather than folded into one
+		// "attribute offence" flag to match ManaFromIntellect's granularity: a future talent that
+		// wants to kill only one of them can, without inheriting the other.
+		DamageFromDexterity = 1 << 2,
+		DamageFromIntellect = 1 << 3,
 	}
 
 	/// <summary>

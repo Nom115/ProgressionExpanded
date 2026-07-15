@@ -1,6 +1,7 @@
 using System;
 using Terraria;
 using Terraria.ModLoader;
+using ProgressionExpanded.Src.NPCs.Enemy.Elemental;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems
 {
@@ -44,12 +45,28 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// <summary>Percent increase to area-of-effect (explosion radius/damage).</summary>
 		public float AreaPercent;
 
+		/// <summary>
+		/// Percent of the damage you deal that is added, per second, as damage-over-time of each
+		/// element. Indexed by <c>(int)DamageElement</c>.
+		///
+		/// Every conversion source pools here — the five elemental masteries, Plaguebearer, and
+		/// (Phase 3) rolled item modifiers — and <see cref="ElementalDotApplier"/> is the sole
+		/// consumer, exactly as <see cref="LifeLeechApplier"/> is for LifeLeechPercent. It owns the
+		/// duration, the resistance lookup, the stack cap and the buff icon. Grant conversion by
+		/// adding here; do not apply a debuff yourself, because a debuff on its own now deals
+		/// nothing at all.
+		///
+		/// Readonly and cleared rather than reallocated: this runs every frame for every player.
+		/// </summary>
+		public readonly float[] ElementalConversion = new float[DamageElementInfo.Count];
+
 		public override void ResetEffects()
 		{
 			LifeLeechPercent = 0f;
 			HealingPercent = 0f;
 			AilmentPercent = 0f;
 			AreaPercent = 0f;
+			Array.Clear(ElementalConversion, 0, ElementalConversion.Length);
 		}
 
 		/// <summary>Convenience accessor for the item applier / notables.</summary>

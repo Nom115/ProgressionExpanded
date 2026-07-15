@@ -5,6 +5,7 @@ using Terraria;
 using Terraria.Audio;
 using Terraria.ID;
 using Terraria.ModLoader;
+using ProgressionExpanded.Src.NPCs.Enemy.Elemental;
 
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 {
@@ -18,32 +19,35 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Plaguebearer";
 
 		public override string Description =>
-			"Your hits inflict Bleeding, On Fire, Venom, Frostburn and Electrified at once. "
-			+ "Enemies suffering 3 or more debuffs take 40% more damage from you.";
+			"Your hits inflict Bleeding, On Fire, Venom, Frostburn and Electrified at once, each "
+			+ "dealing 3% of the damage you deal per second. Enemies suffering 3 or more debuffs "
+			+ "take 40% more damage from you.";
 
-		private const int DebuffDurationTicks = 60 * 5;
 		private const int DebuffsForBonus = 3;
 		private const float DamageBonus = 0.40f;
 
-		private static readonly int[] Plagues =
+		/// <summary>
+		/// Conversion granted in EVERY element, so all five debuffs land. Five elements at 3% is
+		/// 15% total conversion against a maxed single mastery's 8% — roughly twice a mastery, for
+		/// a boss-gated slot that costs no points and pays no breadth gate.
+		/// </summary>
+		private const float ConversionPerElement = 0.03f;
+
+		public override void PostUpdateMiscEffects(Player player)
 		{
-			BuffID.Bleeding,
-			BuffID.OnFire,
-			BuffID.Venom,
-			BuffID.Frostburn,
-			BuffID.Electrified,
-		};
+			// This used to be an OnHitNPC that called AddBuff for all five plagues directly. Under
+			// the elemental system that would inflict five debuffs which deal NOTHING: a debuff is
+			// only an icon now, and the damage comes from the conversion pool. Granting conversion
+			// instead is what makes the talent do what its name says.
+			//
+			// ElementalDotApplier applies the icon for every element that has conversion, so all
+			// five still land and CountDebuffs below still sees them — the 3+ bonus is unchanged.
+			// It also means this pools with the elemental masteries rather than competing: an
+			// Immolation rank 4 Plaguebearer has 8% + 3% = 11% fire conversion.
+			CombatEffectStats effects = player.GetModPlayer<CombatEffectStats>();
 
-		public override void OnHitNPC(Player player, NPC target, NPC.HitInfo hit, int damageDone)
-		{
-			if (target.friendly)
-				return;
-
-			float ailmentMultiplier = 1f + player.GetModPlayer<CombatEffectStats>().AilmentPercent / 100f;
-			int duration = (int)(DebuffDurationTicks * ailmentMultiplier);
-
-			foreach (int buff in Plagues)
-				target.AddBuff(buff, duration);
+			for (int e = 0; e < DamageElementInfo.Count; e++)
+				effects.ElementalConversion[e] += ConversionPerElement * 100f;
 		}
 
 		public override void ModifyHitNPC(Player player, NPC target, ref NPC.HitModifiers modifiers)

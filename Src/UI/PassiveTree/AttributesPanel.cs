@@ -172,28 +172,38 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		/// <summary>What one more point buys, in the units the player actually sees.</summary>
 		private static string PerPointOf(PlayerAttribute attribute)
 		{
+			// Whole percent, so 0.005f reads as "0.5%" rather than "0.005".
+			string damage = $"{AttributeManager.DamagePerAttributePoint * 100f:0.#}%";
+
 			switch (attribute)
 			{
 				case PlayerAttribute.Strength:
-					return $"+{AttributeManager.HealthPerStrength} maximum life per point";
+					return $"+{AttributeManager.HealthPerStrength} maximum life and {damage} more "
+						+ "melee and summon damage per point";
 				case PlayerAttribute.Dexterity:
-					return "+1% melee attack speed, magic cast speed and ranged velocity per point";
+					return "+1% melee attack speed, magic cast speed and ranged velocity, and "
+						+ $"{damage} more ranged damage per point";
 				default:
-					return $"+{AttributeManager.ManaPerIntellect} maximum mana per point";
+					return $"+{AttributeManager.ManaPerIntellect} maximum mana and {damage} more "
+						+ "magic damage per point";
 			}
 		}
 
 		/// <summary>The running total, so the player can see what they've actually bought.</summary>
 		private string TotalOf(Player player, int value)
 		{
+			// Matches AttributeManager.ApplyAttributeDamage: linear in point count, applied once as a
+			// multiplier. If that ever compounds per point instead, this reads wrong.
+			string damage = $"x{1f + AttributeManager.DamagePerAttributePoint * value:0.00}";
+
 			switch (attribute)
 			{
 				case PlayerAttribute.Strength:
-					return $"+{value * AttributeManager.HealthPerStrength} maximum life";
+					return $"+{value * AttributeManager.HealthPerStrength} maximum life, {damage} melee/summon damage";
 				case PlayerAttribute.Dexterity:
-					return $"+{value}% attack speed / velocity";
+					return $"+{value}% attack speed / velocity, {damage} ranged damage";
 				default:
-					return $"+{value * AttributeManager.ManaPerIntellect} maximum mana";
+					return $"+{value * AttributeManager.ManaPerIntellect} maximum mana, {damage} magic damage";
 			}
 		}
 
@@ -205,12 +215,18 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		{
 			TalentPlayer talents = TalentPlayer.Get(player);
 
+			// Both halves are checked, not just one. An attribute whose speed/mana line is dead but
+			// whose damage line still pays is not DISABLED, and saying so would talk a player out of
+			// the only live option they have. Juggernaut declares all four flags, so it still reads
+			// as fully disabled here — this only matters the day a talent suppresses one half alone.
 			if (attribute == PlayerAttribute.Dexterity
-				&& talents.Suppresses(TalentSuppression.AttackSpeedIncreases))
+				&& talents.Suppresses(TalentSuppression.AttackSpeedIncreases)
+				&& talents.Suppresses(TalentSuppression.DamageFromDexterity))
 				return "  [DISABLED by Juggernaut]";
 
 			if (attribute == PlayerAttribute.Intellect
-				&& talents.Suppresses(TalentSuppression.ManaFromIntellect))
+				&& talents.Suppresses(TalentSuppression.ManaFromIntellect)
+				&& talents.Suppresses(TalentSuppression.DamageFromIntellect))
 				return "  [DISABLED by Juggernaut]";
 
 			return "";

@@ -24,6 +24,21 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Attributes
 		public const int ManaPerIntellect = 2;
 		public const float SpeedPerDexterity = 0.01f; // 1% per point
 
+		/// <summary>
+		/// The offensive line every attribute now carries: Strength arms melee and summon, Dexterity
+		/// ranged, Intellect magic.
+		///
+		/// Deliberately an order of magnitude weaker than a mastery rank — Berserker buys 5% more
+		/// melee damage for the same one point this buys 0.5% of. That is not an oversight: the
+		/// mastery breadth gate (PassiveTreeManager.AttributeRequirementFor) forces ~50 of a
+		/// character's 99 points into attributes regardless, so attributes are a tax rather than a
+		/// competing purchase. The point of this line is that the tax costs every build the SAME.
+		/// Before it, Dexterity's attack speed was the only offensive attribute and it covered melee
+		/// and magic only — a ranged or summoner character paid the identical 50 points and could buy
+		/// nothing but Strength's flat life, worth about five ranks of Fortitude.
+		/// </summary>
+		public const float DamagePerAttributePoint = 0.005f; // 0.5% more damage per point
+
 		private const string StrengthKey = "Strength";
 		private const string DexterityKey = "Dexterity";
 		private const string IntellectKey = "Intellect";
@@ -200,6 +215,39 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Attributes
 		public override void PostUpdateMiscEffects()
 		{
 			ApplyDexterity();
+			ApplyAttributeDamage();
+		}
+
+		/// <summary>
+		/// The offensive half of each attribute — see DamagePerAttributePoint for why it is as small
+		/// as it is, and why it exists at all.
+		/// </summary>
+		private void ApplyAttributeDamage()
+		{
+			// "More", not "increased". GetDamage *= lands in StatModifier.Multiplicative and compounds
+			// with gear, which is what every percent damage key in StatApplier already does — a flat
+			// += here would instead be flat ADDED damage, a different stat entirely.
+			//
+			// Scaled linearly by point count and applied once rather than compounded per point: 50
+			// points is x1.25, not 1.005^50. Predictable beats marginally bigger.
+			if (strength > 0)
+			{
+				float strengthBonus = 1f + DamagePerAttributePoint * strength;
+				Player.GetDamage(DamageClass.Melee) *= strengthBonus;
+				Player.GetDamage(DamageClass.Summon) *= strengthBonus;
+			}
+
+			// Juggernaut kills Dexterity and Intellect outright, damage included — asked here rather
+			// than cancelled afterwards, for the same reason as the mana and attack-speed lines: the
+			// answer is derived from the player's picks, so it is stable at any point in the frame and
+			// does not depend on which ModPlayer happens to run first.
+			TalentPlayer talents = TalentPlayer.Get(Player);
+
+			if (dexterity > 0 && !talents.Suppresses(TalentSuppression.DamageFromDexterity))
+				Player.GetDamage(DamageClass.Ranged) *= 1f + DamagePerAttributePoint * dexterity;
+
+			if (intellect > 0 && !talents.Suppresses(TalentSuppression.DamageFromIntellect))
+				Player.GetDamage(DamageClass.Magic) *= 1f + DamagePerAttributePoint * intellect;
 		}
 
 		/// <summary>

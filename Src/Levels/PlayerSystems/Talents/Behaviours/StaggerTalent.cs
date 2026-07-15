@@ -13,12 +13,26 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// swing your survival or damage about as far as this does, it is not big enough to be one of
 	/// only six picks. It is fixed at what used to be the tier-4 form; there are no ranks any more.
 	///
-	/// The stagger itself does not reduce damage — it buys you a window. Everything hits eventually,
-	/// so it only pays off if you can out-heal or out-run the bleed, which is why Fleshless (no
-	/// regeneration) is a trap next to it, and why Vengeance, which wants damage to land hard and
-	/// fast, is its opposite number in the same slot. The defense and flat life are separate: they
-	/// shrink the hit BEFORE it is split, so they make the window easier to answer rather than
-	/// longer.
+	/// The stagger itself does not reduce damage — it buys you a window, and how you spend that window
+	/// IS the talent. Everything hits eventually, so it only pays off if you answer the bleed, which is
+	/// why Fleshless (no regeneration) is a trap next to it, and why Vengeance, which wants damage to
+	/// land hard and fast, is its opposite number in the same slot. The defense and flat life are
+	/// separate: they shrink the hit BEFORE it is split, so they make the window easier to answer
+	/// rather than longer.
+	///
+	/// <b>The move/plant trade is the tension, and it is armed only while a bleed is live.</b> Take a
+	/// hit and you have 5.5 seconds to choose: run, and your regeneration doubles while your damage is
+	/// halved — you out-run the bleed; or plant your feet, and you hit 50% harder while the bleed eats
+	/// you. Once the bleed clears there is no bonus and no penalty, so this is a recurring, bounded
+	/// decision rather than a permanent tax.
+	///
+	/// <b>Why bounded matters.</b> An always-on "half damage while moving" would not be a choice at
+	/// all: Terraria bosses force movement, so Stagger would simply deal half damage for whole fights
+	/// against Juggernaut's flat x1.65. Tying the mode to the bleed means the cost only exists in the
+	/// window where the choice is real, and the window only opens because you were hit.
+	///
+	/// This is deliberately the opposite pole from Juggernaut, which is the wall that cannot move.
+	/// Stagger is the one that has to.
 	/// </summary>
 	public class StaggerTalent : TalentBehaviour
 	{
@@ -29,8 +43,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string Description =>
 			"150% more defense, +150 maximum life and +8 life regeneration per second. 55% of the damage "
 			+ "you take is dealt to you over 5.5 seconds instead of all at once. It is delayed, not "
-			+ "prevented — you need to answer it. Your life regeneration is doubled once the bleed has "
-			+ "run out and nothing has hit you for 5 seconds.";
+			+ "prevented — you need to answer it. While it is running, keep moving and your life "
+			+ "regeneration doubles but you deal half damage; hold your ground for a second and you "
+			+ "deal 50% more instead. Run it off, or stand and trade.";
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
@@ -44,10 +59,25 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// </summary>
 		private const float FlatRegenPerSecond = 8f;
 
-		/// <summary>Quiet time after the last real hit before regeneration doubles.</summary>
-		private const int OutOfCombatTicks = 60 * 5;
+		/// <summary>
+		/// Time spent stationary before you count as planted.
+		///
+		/// One threshold, two states, no neutral middle: you are "moving" from the instant you move
+		/// until you have held still this long. So a momentary pause does not cost you the heal, and
+		/// the damage stance has to be committed to. Erring toward the heal is deliberate — it is the
+		/// half you take the talent for.
+		///
+		/// It also kills the frame-perfect trick the alternative invites. Damage is judged at hit time
+		/// (see ModifyHitNPC), so with an instant threshold you could run for the healing and stop for
+		/// the single frame your hit lands to bank the bonus as well. A second of commitment makes that
+		/// cost a second of not healing, which is the trade working as intended.
+		/// </summary>
+		private const int PlantTicks = 60;
 
-		private const float RegenMultiplier = 2f;
+		/// <summary>Untested first guesses, all three. These are the dials. See the class docs.</summary>
+		private const float MovingRegenMultiplier = 2f;
+		private const float MovingDamageMultiplier = 0.5f;
+		private const float PlantedDamageMultiplier = 1.5f;
 
 		/// <summary>
 		/// DefensePercent multiplies a Player.DefenseStat, which tracks adds and multiplies
@@ -70,9 +100,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// It lands via StatApplier from PostUpdateMiscEffects, which has two consequences worth
 		/// knowing: any vanilla DoT wipes it (UpdateLifeRegen zeroes a positive lifeRegen before
 		/// applying Poison/On Fire/Venom degen, so this is off entirely while one ticks), and the
-		/// out-of-combat doubling below catches it, taking it to 16 HP/s once the bleed has cleared.
+		/// moving doubling below catches it, taking it to 16 HP/s.
+		///
 		/// The stagger bleed itself does NOT wipe it — StaggerDebuff is display-only and never sets
-		/// player.bleed — so this is the regeneration you answer your own bleed with.
+		/// player.bleed, which vanilla would otherwise treat as a regen stopper. So this is the
+		/// regeneration you answer your own bleed with, and running is what doubles it.
 		/// </summary>
 		private static readonly Dictionary<string, float> flatBonuses = new Dictionary<string, float>
 		{
@@ -99,16 +131,26 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// </summary>
 		private bool applyingStaggerDamage;
 
-		/// <summary>Ticks since the last hit that was not our own bleed. Clamped, so it never wraps.</summary>
-		private int ticksSinceHurt = OutOfCombatTicks;
+		/// <summary>Consecutive ticks spent stationary. Clamped, so it never wraps.</summary>
+		private int ticksStandingStill;
 
 		/// <summary>
-		/// A live bleed counts as combat no matter how quiet it has gone: the damage is still landing,
-		/// and letting regeneration double while it ticks would undo the "you need to answer it" half
-		/// of the talent. The timer is the backstop for the one case that makes no instance — a hit
-		/// taken at MaxInstances.
+		/// Whether the trade is armed. Nothing below does anything without a live bleed — no bonus, no
+		/// penalty, which is what keeps this from being a permanent damage tax in fights that force you
+		/// to move.
 		/// </summary>
-		private bool IsOutOfCombat => instances.Count == 0 && ticksSinceHurt >= OutOfCombatTicks;
+		private bool IsBleeding => instances.Count > 0;
+
+		/// <summary>
+		/// Planted, i.e. holding ground rather than running. See PlantTicks for why the threshold is
+		/// one-sided.
+		///
+		/// A real hit knocks you loose from this on its own and no combat check is needed to make it
+		/// so: Player.Hurt writes velocity whenever hitDirection != 0 (Player.cs:37929). Our own bleed
+		/// passes hitDirection 0 and so deliberately does not — otherwise the bleed would break your
+		/// stance every tick and the planted half of the talent could never be held at all.
+		/// </summary>
+		private bool IsPlanted => ticksStandingStill >= PlantTicks;
 
 		public override void OnDeactivate(Player player)
 		{
@@ -125,7 +167,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		{
 			instances.Clear();
 			accumulatedDamage = 0f;
-			ticksSinceHurt = OutOfCombatTicks;
+
+			// Zero rather than full: the doubling must be re-earned by actually standing still. Handing
+			// it out at respawn would have it live the instant you drop in.
+			ticksStandingStill = 0;
 
 			int buffType = ModContent.BuffType<StaggerDebuff>();
 			if (player.HasBuff(buffType))
@@ -133,30 +178,55 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// Gear- and buff-sourced regeneration, doubled from inside UpdateLifeRegen. The guard is real
-		/// here: every DoT has already driven lifeRegen negative by the time this fires, and doubling
-		/// a negative would make Poison and On Fire twice as lethal in exactly the quiet moment this
-		/// talent is meant to reward.
+		/// The healing half: run and your regeneration doubles. Applies to the flat component only —
+		/// gear, buffs, and this talent's own +8/s, taking it to 16.
+		///
+		/// <b>There is deliberately no NaturalLifeRegen counterpart, and it would be dead code if there
+		/// were.</b> Vanilla's natural ramp is driven by player.lifeRegenTime, and Player.Hurt zeroes
+		/// that on every call (Player.cs:37838) — including our own bleed's, which fires every few
+		/// ticks. The ramp needs 300 unbroken ticks to reach even its first step, so it sits pinned at
+		/// zero for the entire bleed. Since this trade only ever arms while a bleed is live, doubling
+		/// the ramp would be doubling zero, every time, without exception.
+		///
+		/// That is also why doubling the flat component is the right lever rather than a compromise:
+		/// vanilla penalises the natural ramp for moving (x0.5 against x1.25 stationary,
+		/// Player.cs:18003) but does nothing of the sort to flat regen. A x2 on the ramp would not even
+		/// reach parity with standing still; a x2 on flat regen means exactly what it says.
+		///
+		/// The lifeRegen > 0 guard is real: a vanilla DoT has already driven it negative by the time we
+		/// run, and doubling a negative would make Poison and On Fire twice as lethal precisely when
+		/// you are trying to escape.
 		/// </summary>
 		public override void UpdateLifeRegen(Player player)
 		{
-			if (!IsOutOfCombat || player.lifeRegen <= 0)
+			if (!IsBleeding || IsPlanted || player.lifeRegen <= 0)
 				return;
 
-			player.lifeRegen = (int)(player.lifeRegen * RegenMultiplier);
+			player.lifeRegen = (int)(player.lifeRegen * MovingRegenMultiplier);
 		}
 
 		/// <summary>
-		/// The natural ramp, and the half that actually matters. Out of combat almost all of a player's
-		/// regeneration is this, and it is added to lifeRegen after every other hook in the tick has
-		/// run — so PostUpdateMiscEffects (where the rest of this mod scales regen) cannot reach it.
+		/// The damage half of the trade, judged at HIT time rather than fire time. That is what makes
+		/// this fair across classes, and it is the whole reason the multiplier is not on GetDamage.
+		///
+		/// <b>The trap this avoids.</b> Terraria snapshots a projectile's damage when it spawns
+		/// (Projectile.cs:93467), so a GetDamage multiplier would let a ranged player stop for a single
+		/// frame, fire, and move off with a full-damage projectile in flight. Minions and sentries are
+		/// the opposite — they recalculate from live player stats every frame
+		/// (Projectile.cs:15924) — so a summoner would eat the penalty constantly with no counterplay,
+		/// and melee, computed at contact, would eat it in full too. The penalty would land hardest on
+		/// the classes that kite worst and let the best kiters off free.
+		///
+		/// ModifyHitNPCWithProj routes through ModifyHitNPC (PlayerLoader.cs:1606), so this one hook
+		/// covers melee, ranged, magic and minions alike, and every one of them is judged on where the
+		/// player actually is when the damage lands.
 		/// </summary>
-		public override void NaturalLifeRegen(Player player, ref float regen)
+		public override void ModifyHitNPC(Player player, NPC target, ref NPC.HitModifiers modifiers)
 		{
-			if (!IsOutOfCombat)
+			if (!IsBleeding)
 				return;
 
-			regen *= RegenMultiplier;
+			modifiers.FinalDamage *= IsPlanted ? PlantedDamageMultiplier : MovingDamageMultiplier;
 		}
 
 		public override void ModifyHurt(Player player, ref Player.HurtModifiers modifiers)
@@ -184,16 +254,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void PostHurt(Player player, Player.HurtInfo info)
 		{
-			// Our own bleed re-enters Hurt every tick it lands. It is not a fresh hit, and a live
-			// bleed already holds IsOutOfCombat false on its own.
+			// Our own bleed re-enters Hurt every tick it lands. It is not a fresh hit.
 			if (applyingStaggerDamage)
 				return;
 
-			// Reset ABOVE the pendingStaggerPercent early-out. A hit taken at MaxInstances is not
-			// staggered but is still the player being attacked, and returning first would let them
-			// count as out of combat while under fire — precisely when the cap is being hit.
-			ticksSinceHurt = 0;
-
+			// Nothing here touches the stance timer. Being hit does not itself break your stance — the
+			// knockback the hit carries does, by moving you. A hit that lands without knockback leaves
+			// you planted, which is correct: you did not move.
 			if (pendingStaggerPercent <= 0f)
 				return;
 
@@ -223,11 +290,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
-			// Counted here rather than in PostUpdate because Player.Update runs PostUpdateMiscEffects
-			// immediately before UpdateLifeRegen, and the regen hooks below read the result. Clamped
-			// rather than left to climb, so it cannot overflow across a long session.
-			if (ticksSinceHurt < OutOfCombatTicks)
-				ticksSinceHurt++;
+			// IsStandingStillForSpecialEffects is vanilla's own definition of stationary (|velocity|
+			// under 0.05 on both axes) — the one Shiny Stone uses. Counted here rather than in
+			// PostUpdate because Player.Update runs PostUpdateMiscEffects immediately before
+			// UpdateLifeRegen (Player.cs:24940), and UpdateLifeRegen reads the result; that is the same
+			// point in the frame at which vanilla reads this property for Shiny Stone, so we see the
+			// velocity vanilla sees. Clamped rather than left to climb, so it cannot overflow across a
+			// long session.
+			//
+			// Deliberately NOT gated on itemAnimation == 0 the way Shiny Stone is: planting your feet
+			// to swing is the entire point of the stance. Only movement breaks it.
+			if (!player.IsStandingStillForSpecialEffects)
+				ticksStandingStill = 0;
+			else if (ticksStandingStill < PlantTicks)
+				ticksStandingStill++;
 
 			if (instances.Count == 0)
 			{
@@ -318,6 +394,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			return longest;
 		}
 
+		/// <summary>
+		/// Which side of the trade is live right now, for the buff tooltip.
+		///
+		/// This is worth surfacing rather than leaving to be felt: the two stances are a 3x swing in
+		/// damage dealt, and a player who cannot see which one they are in reads that as their damage
+		/// numbers randomly tripling.
+		/// </summary>
+		public string GetStanceText()
+		{
+			return IsPlanted
+				? "Planted: +50% damage"
+				: "Moving: double regeneration, half damage";
+		}
+
 		private class StaggerInstance
 		{
 			public float RemainingDamage { get; set; }
@@ -353,7 +443,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			{
 				if (behaviour is StaggerTalent stagger)
 				{
-					tip = $"Taking {(int)stagger.GetTotalStaggeredDamage()} damage over {stagger.GetLongestStaggerDuration():F1} seconds";
+					tip = $"Taking {(int)stagger.GetTotalStaggeredDamage()} damage over {stagger.GetLongestStaggerDuration():F1} seconds"
+						+ $"\n{stagger.GetStanceText()}";
 					return;
 				}
 			}

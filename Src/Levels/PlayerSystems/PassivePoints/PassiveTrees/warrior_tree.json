@@ -146,7 +146,7 @@
     "rend_notable": {
       "NodeId": "rend_notable",
       "DisplayName": "Rend",
-      "Description": "Notable: your hits inflict Bleeding. Duration 3s, +1s per tier (up to 6s).",
+      "Description": "Notable: your hits cause Bleeding, dealing 2% of the damage you deal per second per tier for 4s. Bleeding is physical - it ignores elemental resistance entirely, so it stays reliable where the elements hit a wall.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
@@ -156,7 +156,7 @@
     "immolation_notable": {
       "NodeId": "immolation_notable",
       "DisplayName": "Immolation",
-      "Description": "Notable: your hits set enemies On Fire. Duration 3s, +1s per tier (up to 6s).",
+      "Description": "Notable: your hits set enemies On Fire, dealing 2% of the damage you deal as fire damage per second per tier for 4s. Scales with your weapon, so it never falls off.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
@@ -166,7 +166,7 @@
     "venom_notable": {
       "NodeId": "venom_notable",
       "DisplayName": "Venom",
-      "Description": "Notable: your hits inflict Venom, a potent poison. Duration 2s, +0.75s per tier.",
+      "Description": "Notable: your hits inflict Venom, dealing 2% of the damage you deal as poison damage per second per tier for 4s. Scales with your weapon, so it never falls off.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
@@ -176,7 +176,7 @@
     "frostbite_notable": {
       "NodeId": "frostbite_notable",
       "DisplayName": "Frostbite",
-      "Description": "Notable: your hits inflict Frostburn. Duration 3s, +1s per tier (up to 6s).",
+      "Description": "Notable: your hits inflict Frostburn, dealing 2% of the damage you deal as cold damage per second per tier for 4s. Scales with your weapon, so it never falls off.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
@@ -186,7 +186,7 @@
     "shock_notable": {
       "NodeId": "shock_notable",
       "DisplayName": "Shock",
-      "Description": "Notable: your hits inflict Electrified. Duration 2s, +0.75s per tier.",
+      "Description": "Notable: your hits inflict Electrified, dealing 2% of the damage you deal as lightning damage per second per tier for 4s. Scales with your weapon, so it never falls off.",
       "MaxTier": 4,
       "PointsPerTier": 1,
       "Prerequisites": [],
