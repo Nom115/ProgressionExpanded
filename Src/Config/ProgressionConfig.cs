@@ -23,25 +23,37 @@ namespace ProgressionExpanded.Src.Config
 		[Increment(0.1f)]
 		[DefaultValue(1.0f)]
 		public float XPBarScale { get; set; }
-	[Header("HealthBarSettings")]
-	[DefaultValue(true)]
-	public bool ShowCustomHealthBar { get; set; }
+		[Header("HealthBarSettings")]
+		[DefaultValue(true)]
+		public bool ShowCustomHealthBar { get; set; }
 
-	[DefaultValue(false)]
-	public bool HideVanillaHearts { get; set; }
+		/// <summary>
+		/// Hides the vanilla hearts only. Ignored while ShowCustomHealthBar is off, so this can
+		/// never leave the player with no health readout.
+		/// </summary>
+		[DefaultValue(false)]
+		public bool HideVanillaHearts { get; set; }
 
-	[Range(0, 1920)]
-	[DefaultValue(20)]
-	public int HealthBarX { get; set; }
+		/// <summary>
+		/// Hides the vanilla mana stars. There is no custom mana bar, so this means no mana readout
+		/// at all.
+		/// </summary>
+		[DefaultValue(false)]
+		public bool HideVanillaMana { get; set; }
 
-	[Range(0, 1080)]
-	[DefaultValue(120)]
-	public int HealthBarY { get; set; }
+		[Range(0, 1920)]
+		[DefaultValue(20)]
+		public int HealthBarX { get; set; }
 
-	[Range(0.5f, 2.0f)]
-	[Increment(0.1f)]
-	[DefaultValue(1.0f)]
-	public float HealthBarScale { get; set; }
+		[Range(0, 1080)]
+		[DefaultValue(120)]
+		public int HealthBarY { get; set; }
+
+		[Range(0.5f, 2.0f)]
+		[Increment(0.1f)]
+		[DefaultValue(1.0f)]
+		public float HealthBarScale { get; set; }
+
 		[Header("LevelDisplaySettings")]
 		[DefaultValue(true)]
 		public bool ShowPlayerLevels { get; set; }

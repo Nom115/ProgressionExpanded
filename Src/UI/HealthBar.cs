@@ -142,7 +142,7 @@ namespace ProgressionExpanded.Src.UI
 	}
 
 	/// <summary>
-	/// ModSystem that manages the Health bar UI layer and hides vanilla hearts
+	/// ModSystem that manages the Health bar UI layer
 	/// </summary>
 	public class HealthBarUISystem : ModSystem
 	{
@@ -166,18 +166,9 @@ namespace ProgressionExpanded.Src.UI
 
 		public override void ModifyInterfaceLayers(System.Collections.Generic.List<GameInterfaceLayer> layers)
 		{
-			// Hide vanilla hearts if config enabled
-			var config = ModContent.GetInstance<ProgressionConfig>();
-			if (config != null && config.HideVanillaHearts)
-			{
-				int resourceBarsIndex = layers.FindIndex(layer => layer.Name.Equals("Vanilla: Resource Bars"));
-				if (resourceBarsIndex != -1)
-				{
-					layers.RemoveAt(resourceBarsIndex);
-				}
-			}
-
-			// Add custom health bar
+			// Add custom health bar. Hiding the vanilla hearts is NOT done here: "Vanilla: Resource
+			// Bars" is a single layer that also draws mana, breath, buffs and golf power, so removing
+			// it takes all of them with it. VanillaResourceOverlay suppresses just life/mana instead.
 			int mouseTextIndex = layers.FindIndex(layer => layer.Name.Equals("Vanilla: Mouse Text"));
 			if (mouseTextIndex != -1)
 			{
