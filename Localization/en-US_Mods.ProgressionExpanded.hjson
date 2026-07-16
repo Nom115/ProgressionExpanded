@@ -58,6 +58,7 @@ Configs: {
 			XPBarSettings: XP Bar Settings
 			LevelDisplaySettings: Level Display Settings
 			HealthBarSettings: Health Bar Settings Header
+			ManaBarSettings: Mana Bar Settings
 			VengeanceReadoutSettings: Vengeance Readout Settings
 		}
 
@@ -121,9 +122,29 @@ Configs: {
 			Tooltip: ""
 		}
 
+		ShowCustomManaBar: {
+			Label: Show Custom Mana Bar
+			Tooltip: Enable or disable the custom mana bar display
+		}
+
 		HideVanillaMana: {
-			Tooltip: ""
+			Tooltip: Hide the vanilla mana stars. Ignored unless the custom mana bar is shown.
 			Label: Hide Vanilla Mana
+		}
+
+		ManaBarX: {
+			Label: Mana Bar X
+			Tooltip: Horizontal position of the mana bar (pixels from left)
+		}
+
+		ManaBarY: {
+			Label: Mana Bar Y
+			Tooltip: Vertical position of the mana bar (pixels from bottom)
+		}
+
+		ManaBarScale: {
+			Label: Mana Bar Scale
+			Tooltip: Size multiplier for the mana bar
 		}
 
 		ShowVengeanceReadout: {

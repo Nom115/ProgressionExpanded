@@ -90,6 +90,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 		/// </summary>
 		public virtual void NaturalLifeRegen(Player player, ref float regen) { }
 
+		/// <summary>
+		/// A life-healing potion was just consumed — before the heal is applied.
+		///
+		/// Dispatched from TalentPlayer.ApplyPotionDelay, which is tML's potion-delay VETO hook used
+		/// as an event, because it is the only hook that sees an actual consumption. GetHealLife looks
+		/// like the obvious candidate and is not: vanilla also calls it speculatively from
+		/// QuickHeal_GetItemToUse (Player.cs:6332) while merely deciding WHICH potion to drink, so it
+		/// fires for potions that are never used.
+		/// </summary>
+		public virtual void OnPotionUsed(Player player, Item item) { }
+
 		public virtual void ModifyHurt(Player player, ref Player.HurtModifiers modifiers) { }
 		public virtual void PostHurt(Player player, Player.HurtInfo info) { }
 		public virtual void OnHitNPC(Player player, NPC target, NPC.HitInfo hit, int damageDone) { }

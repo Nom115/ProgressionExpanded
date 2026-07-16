@@ -248,6 +248,33 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 				active[i].NaturalLifeRegen(Player, ref regen);
 		}
 
+		/// <summary>
+		/// tML's potion-delay veto, dispatched here purely as the "a potion was drunk" event — see
+		/// TalentBehaviour.OnPotionUsed for why no cleaner hook exists.
+		///
+		/// Always returns true: talents are given an event, not a vote. Letting a behaviour veto the
+		/// delay would be a different feature, and a surprising one to reach through this name.
+		///
+		/// Safe to use as an event even though it is a veto, because PlayerLoader.ApplyPotionDelay
+		/// accumulates with `flag &amp;= current.ApplyPotionDelay(...)` and does NOT short-circuit — every
+		/// ModPlayer's hook runs regardless of what another mod returned. The one consequence is that
+		/// this can fire for a potion whose delay some other mod then vetoes; harmless, since the potion
+		/// still heals and the veto only skips setting potionDelay.
+		/// </summary>
+		public override bool ApplyPotionDelay(Item item, int potionDelay)
+		{
+			// healLife > 0 rather than item.potion: vanilla gates its own call on item.potion and
+			// reaches this from the QuickMana path too (Player.cs:6370), so item.potion alone would
+			// also fire for a mana potion that happens to set the flag.
+			if (item != null && item.healLife > 0)
+			{
+				for (int i = 0; i < active.Count; i++)
+					active[i].OnPotionUsed(Player, item);
+			}
+
+			return true;
+		}
+
 		public override void ModifyHurt(ref Player.HurtModifiers modifiers)
 		{
 			for (int i = 0; i < active.Count; i++)

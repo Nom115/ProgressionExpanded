@@ -34,13 +34,6 @@ namespace ProgressionExpanded.Src.Config
 		[DefaultValue(false)]
 		public bool HideVanillaHearts { get; set; }
 
-		/// <summary>
-		/// Hides the vanilla mana stars. There is no custom mana bar, so this means no mana readout
-		/// at all.
-		/// </summary>
-		[DefaultValue(false)]
-		public bool HideVanillaMana { get; set; }
-
 		[Range(0, 1920)]
 		[DefaultValue(20)]
 		public int HealthBarX { get; set; }
@@ -53,6 +46,34 @@ namespace ProgressionExpanded.Src.Config
 		[Increment(0.1f)]
 		[DefaultValue(1.0f)]
 		public float HealthBarScale { get; set; }
+
+		[Header("ManaBarSettings")]
+		[DefaultValue(true)]
+		public bool ShowCustomManaBar { get; set; }
+
+		/// <summary>
+		/// Hides the vanilla mana stars. Ignored while ShowCustomManaBar is off, so this can never
+		/// leave the player with no mana readout — which matters more than it looks: Stagger pays its
+		/// bleed out of mana before life, so on that build the pool is the health bar.
+		/// </summary>
+		[DefaultValue(false)]
+		public bool HideVanillaMana { get; set; }
+
+		[Range(0, 1920)]
+		[DefaultValue(20)]
+		public int ManaBarX { get; set; }
+
+		/// <summary>
+		/// Stacks upward from the bottom-left: XP (80), health (120), Vengeance readout (160), mana.
+		/// </summary>
+		[Range(0, 1080)]
+		[DefaultValue(200)]
+		public int ManaBarY { get; set; }
+
+		[Range(0.5f, 2.0f)]
+		[Increment(0.1f)]
+		[DefaultValue(1.0f)]
+		public float ManaBarScale { get; set; }
 
 		/// <summary>
 		/// The Vengeance ramp readout. Only ever drawn while Vengeance is picked and the ramp is

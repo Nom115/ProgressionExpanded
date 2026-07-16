@@ -5,6 +5,8 @@ using Terraria;
 using Terraria.Audio;
 using Terraria.ID;
 using Terraria.UI;
+using Terraria.UI.Chat;
+using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 using UIGrid = Terraria.ModLoader.UI.Elements.UIGrid;
@@ -313,13 +315,17 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			else if (picked == null)
 				owner.SetHoverTooltip($"{slot.DisplayName}\nClick to choose one of three talents.");
 			else
-				owner.SetHoverTooltip($"{picked.DisplayName}\n{picked.Description}");
+				owner.SetHoverTooltip($"{picked.DisplayName}\n{TalentChoiceRow.Wrap(picked.Description)}");
 		}
 	}
 
 	/// <summary>One of the three choices for a slot.</summary>
 	public class TalentChoiceRow : UIPanel
 	{
+		private const float DescriptionScale = 0.75f;
+		private const float DescriptionTop = 26f;
+		private const float Padding = 8f;
+
 		private readonly TalentSlotsPanel owner;
 		private readonly TalentSlot slot;
 		private readonly TalentBehaviour talent;
@@ -333,9 +339,14 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 
 			isCurrent = TalentPlayer.Get(Main.LocalPlayer).GetPick(slot.Key) == talent.Id;
 
+			string wrapped = Wrap(talent.Description);
+
 			Width.Set(0, 1f);
-			Height.Set(88f, 0f);
-			SetPadding(8f);
+			// Sized to the text rather than a constant. The talents do not have comparable
+			// description lengths — a one-liner sits next to Stagger's seven — so any fixed height
+			// is either clipping the longest or padding out the rest.
+			Height.Set(DescriptionTop + MeasureHeight(wrapped) + Padding, 0f);
+			SetPadding(Padding);
 			BackgroundColor = isCurrent ? new Color(60, 100, 60) * 0.9f : new Color(40, 50, 90) * 0.85f;
 			BorderColor = isCurrent ? new Color(120, 200, 120) : new Color(90, 116, 200);
 
@@ -344,17 +355,43 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 			name.TextColor = new Color(255, 215, 0);
 			Append(name);
 
-			UIText description = new UIText(Wrap(talent.Description), 0.75f);
+			UIText description = new UIText(wrapped, DescriptionScale);
 			description.Left.Set(4, 0f);
-			description.Top.Set(26, 0f);
+			description.Top.Set(DescriptionTop, 0f);
 			description.TextColor = new Color(210, 210, 210);
 			Append(description);
 		}
 
 		/// <summary>
-		/// UIText doesn't wrap on its own and these descriptions are long, so break them by hand.
+		/// Pixel height of already-wrapped text, so the card can size itself to it.
+		///
+		/// This has to be measured by hand because <b>UIText cannot report the height of multi-line
+		/// text unless IsWrapped is set</b>: InternalSetText measures the string properly only on
+		/// the IsWrapped branch, and otherwise hardcodes MinHeight to <c>16f * textScale</c> no
+		/// matter how many newlines the string holds. We wrap by hand (see Wrap), so a card that
+		/// trusted UIText would be told its seven-line description was 12px tall.
+		///
+		/// Measuring at scale 1 and multiplying afterwards mirrors UIText's own IsWrapped branch,
+		/// and is not a stylistic choice: ChatManager.GetStringSize scales the per-newline advance
+		/// by baseScale.Y but NOT the final line's height, so passing the scale in directly
+		/// over-measures the last line.
 		/// </summary>
-		private static string Wrap(string text)
+		private static float MeasureHeight(string wrapped)
+		{
+			return ChatManager.GetStringSize(FontAssets.MouseText.Value, wrapped, Vector2.One).Y
+				* DescriptionScale;
+		}
+
+		/// <summary>
+		/// UIText doesn't wrap on its own and these descriptions are long, so break them by hand.
+		///
+		/// Counts characters, not pixels, against a proportional font — so the right margin is
+		/// ragged and the width is a conservative guess rather than a fit. It holds up because the
+		/// panel is 90% of the screen and this wraps at roughly a third of that at every supported
+		/// resolution. The alternative is UIText.IsWrapped, which wraps against real inner width,
+		/// but only once the element has been laid out — which is not true in this constructor.
+		/// </summary>
+		internal static string Wrap(string text)
 		{
 			const int lineLength = 78;
 			System.Text.StringBuilder builder = new System.Text.StringBuilder();
@@ -388,7 +425,8 @@ namespace ProgressionExpanded.Src.UI.PassiveTree
 		public override void MouseOver(UIMouseEvent evt)
 		{
 			base.MouseOver(evt);
-			owner.SetHoverTooltip($"{talent.DisplayName}\n{talent.Description}");
+			// Wrapped: vanilla's MouseText does not break long lines, and these run to 500+ chars.
+			owner.SetHoverTooltip($"{talent.DisplayName}\n{Wrap(talent.Description)}");
 		}
 	}
 }

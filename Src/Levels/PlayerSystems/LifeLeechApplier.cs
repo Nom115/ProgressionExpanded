@@ -62,9 +62,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 				return;
 
 			// Cap the leech first, THEN amplify it. Healing bonuses are the last multiplier applied —
-			// see MaxLeechPerHit. Vengeance at full ramp therefore doubles the effective ceiling
-			// rather than being swallowed by it, which is the whole point of a talent that pays you
-			// for being nearly dead.
+			// see MaxLeechPerHit — so a rolled "Healing" item genuinely raises the ceiling rather than
+			// being swallowed by it.
+			//
+			// HealingPercent, and deliberately NOT ConsumableHealingPercent. A bonus that already reaches
+			// this calculation through damageDone must not be allowed in a second time here, or it gets
+			// squared. Vengeance is exactly that: its ramp multiplies GetDamage, so damageDone below is
+			// already ramped; it used to contribute to HealingPercent as well and turned a full-ramp heal
+			// into 0.30 * baseHit * (1+r)^2 — 4x, against the 2x its own docs promised. It now feeds the
+			// consumable channel instead, which only potions read. See CombatEffectStats.
 			float leeched = damageDone * leechFraction;
 
 			float perHitCap = Math.Max(1f, Player.statLifeMax2 * MaxLeechPerHit);

@@ -20,19 +20,31 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// separate: they shrink the hit BEFORE it is split, so they make the window easier to answer
 	/// rather than longer.
 	///
-	/// <b>The move/plant trade is the tension, and it is armed only while a bleed is live.</b> Take a
-	/// hit and you have 5.5 seconds to choose: run, and your regeneration doubles while your damage is
-	/// halved — you out-run the bleed; or plant your feet, and you hit 50% harder while the bleed eats
-	/// you. Once the bleed clears there is no bonus and no penalty, so this is a recurring, bounded
-	/// decision rather than a permanent tax.
+	/// <b>Mind over Matter: the bleed is paid from mana, not life.</b> Maximum mana is raised by half of
+	/// maximum life, and every tick of the bleed drains mana first — life is only touched once mana runs
+	/// out. Mana is the talent's real health bar, and life is what is left when you mismanage it.
 	///
-	/// <b>Why bounded matters.</b> An always-on "half damage while moving" would not be a choice at
-	/// all: Terraria bosses force movement, so Stagger would simply deal half damage for whole fights
-	/// against Juggernaut's flat x1.65. Tying the mode to the bleed means the cost only exists in the
-	/// window where the choice is real, and the window only opens because you were hit.
+	/// <b>Why mana, and not more regeneration.</b> Flat life regeneration cannot scale: it was 8/s at
+	/// level 1 and 8/s at level 100, against enemy damage that grows 14%/level without a cap, so it fell
+	/// off no matter what number it was given. Vanilla's mana regeneration is PROPORTIONAL to the pool
+	/// (statManaMax2/3 per tick, doubled again for standing still — Player.UpdateManaRegen), so tying the
+	/// pool to maximum life means the sustain scales with every point of Strength and every life bonus,
+	/// forever. Vanilla also already tuned the resource minigame we want: regeneration runs at 20% when
+	/// the pool is empty against 100% when it is full, and the post-hit delay is itself longer the emptier
+	/// you are. Letting the pool bottom out is punishing, and it is supposed to be.
 	///
-	/// This is deliberately the opposite pole from Juggernaut, which is the wall that cannot move.
-	/// Stagger is the one that has to.
+	/// <b>Three answers, not one.</b> Stand still and vanilla's own doubling refills the pool; crit and
+	/// burn a quarter of the bleed off outright; or simply out-last it behind 150% more defense. The
+	/// talent asks whether you can afford to stop, whether you can land a crit, and whether you budgeted
+	/// your mana — and it is a wall only for as long as all three answers hold.
+	///
+	/// <b>Why no damage lever.</b> A move/plant damage trade made this a positioning minigame with an
+	/// offensive upside, which is neither what the talent is for nor what separates it from its
+	/// neighbours. Juggernaut is the wall that cannot move; Vengeance takes the hit and buys the life back
+	/// by attacking. Stagger pays in mana.
+	///
+	/// This also makes Intellect a live stat here — where Juggernaut kills it dead — so the three pinnacle
+	/// picks now want three different attribute spreads.
 	/// </summary>
 	public class StaggerTalent : TalentBehaviour
 	{
@@ -41,16 +53,36 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Stagger";
 
 		public override string Description =>
-			"150% more defense, +150 maximum life and +8 life regeneration per second. 55% of the damage "
-			+ "you take is dealt to you over 5.5 seconds instead of all at once. It is delayed, not "
-			+ "prevented — you need to answer it. While it is running, keep moving and your life "
-			+ "regeneration doubles but you deal half damage; hold your ground for a second and you "
-			+ "deal 50% more instead. Run it off, or stand and trade.";
+			"150% more defense, +150 maximum life and +8 life regeneration per second. Your maximum mana "
+			+ "is increased by 50% of your maximum life. 55% of the damage you take is dealt to you over "
+			+ "5.5 seconds instead of all at once, and that damage is drained from your mana before it "
+			+ "touches your life — but only while you have mana left to arm it. Critical hits burn away "
+			+ "25% of the remaining damage, once per second. Your mana does not recover while you move: "
+			+ "stand still and it floods back, and your life regeneration doubles. Hold your ground and "
+			+ "pay in mana.";
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
 		private const float DefenseBonus = 1.50f;
 		private const float FlatLife = 150f;
+
+		/// <summary>
+		/// Maximum mana granted as a fraction of maximum life. Untested first guess, and the single most
+		/// important dial on the talent: it sets how many hits the pool can absorb before the cliff.
+		/// </summary>
+		private const float ManaPerMaxLifeFraction = 0.50f;
+
+		/// <summary>
+		/// How much of the outstanding bleed a critical hit burns off, and how often it may do so.
+		///
+		/// Both untested first guesses. A fraction rather than a flat number so it never falls off, and
+		/// because it makes the purge worth most immediately after a big hit — crit INTO a fresh bleed
+		/// rather than chip at a stale one. The cooldown is what keeps this from collapsing into
+		/// Vengeance's "attack to sustain" loop: it is a burst clear on a timer, not a per-hit drip that
+		/// scales with weapon speed.
+		/// </summary>
+		private const float CritPurgeFraction = 0.25f;
+		private const int CritPurgeCooldownTicks = 60;
 
 		/// <summary>
 		/// In HP per second, which is NOT the unit Terraria stores: player.lifeRegen counts half-HP
@@ -60,24 +92,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float FlatRegenPerSecond = 8f;
 
 		/// <summary>
-		/// Time spent stationary before you count as planted.
+		/// Untested first guess, and the only dial the stance has left. See the class docs.
 		///
-		/// One threshold, two states, no neutral middle: you are "moving" from the instant you move
-		/// until you have held still this long. So a momentary pause does not cost you the heal, and
-		/// the damage stance has to be committed to. Erring toward the heal is deliberate — it is the
-		/// half you take the talent for.
-		///
-		/// It also kills the frame-perfect trick the alternative invites. Damage is judged at hit time
-		/// (see ModifyHitNPC), so with an instant threshold you could run for the healing and stop for
-		/// the single frame your hit lands to bank the bonus as well. A second of commitment makes that
-		/// cost a second of not healing, which is the trade working as intended.
+		/// There is deliberately no commitment threshold in front of it. That existed to stop a
+		/// frame-perfect trick against the old planted damage bonus — run for the healing, stop for the
+		/// single frame your hit lands, bank both. With no damage lever there is nothing to game: regen
+		/// accrues per tick, so a player who stops for half a second gets exactly half a second of
+		/// doubled regeneration and no more.
 		/// </summary>
-		private const int PlantTicks = 60;
-
-		/// <summary>Untested first guesses, all three. These are the dials. See the class docs.</summary>
-		private const float MovingRegenMultiplier = 2f;
-		private const float MovingDamageMultiplier = 0.5f;
-		private const float PlantedDamageMultiplier = 1.5f;
+		private const float StandingStillRegenMultiplier = 2f;
 
 		/// <summary>
 		/// DefensePercent multiplies a Player.DefenseStat, which tracks adds and multiplies
@@ -100,11 +123,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// It lands via StatApplier from PostUpdateMiscEffects, which has two consequences worth
 		/// knowing: any vanilla DoT wipes it (UpdateLifeRegen zeroes a positive lifeRegen before
 		/// applying Poison/On Fire/Venom degen, so this is off entirely while one ticks), and the
-		/// moving doubling below catches it, taking it to 16 HP/s.
+		/// standing-still doubling below catches it, taking it to 16 HP/s.
 		///
 		/// The stagger bleed itself does NOT wipe it — StaggerDebuff is display-only and never sets
 		/// player.bleed, which vanilla would otherwise treat as a regen stopper. So this is the
-		/// regeneration you answer your own bleed with, and running is what doubles it.
+		/// regeneration you answer your own bleed with, and standing still is what doubles it.
 		/// </summary>
 		private static readonly Dictionary<string, float> flatBonuses = new Dictionary<string, float>
 		{
@@ -131,26 +154,35 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// </summary>
 		private bool applyingStaggerDamage;
 
-		/// <summary>Consecutive ticks spent stationary. Clamped, so it never wraps.</summary>
-		private int ticksStandingStill;
+		/// <summary>Ticks until a critical hit may burn the bleed again. Counted down in PostUpdate.</summary>
+		private int critPurgeCooldown;
 
 		/// <summary>
-		/// Whether the trade is armed. Nothing below does anything without a live bleed — no bonus, no
-		/// penalty, which is what keeps this from being a permanent damage tax in fights that force you
-		/// to move.
-		/// </summary>
-		private bool IsBleeding => instances.Count > 0;
-
-		/// <summary>
-		/// Planted, i.e. holding ground rather than running. See PlantTicks for why the threshold is
-		/// one-sided.
+		/// Maximum mana is half of maximum life, on top of whatever the player already had — mana
+		/// crystals and Intellect still count, so this raises the ceiling rather than replacing it.
 		///
-		/// A real hit knocks you loose from this on its own and no combat check is needed to make it
-		/// so: Player.Hurt writes velocity whenever hitDirection != 0 (Player.cs:37929). Our own bleed
-		/// passes hitDirection 0 and so deliberately does not — otherwise the bleed would break your
-		/// stance every tick and the planted half of the talent could never be held at all.
+		/// <b>statLifeMax2 here is LAST frame's maximum life, and that is fine.</b> Player.ResetEffects
+		/// runs PlayerLoader.ModifyMaxStats and only THEN assigns statLifeMax2 = statLifeMax
+		/// (verified: ResetEffects:94-96), so while we are inside this hook the field still holds the
+		/// previous frame's resolved total. A one-frame lag cannot compound — maximum life only moves on
+		/// level-up, respec or a gear swap, and mana never feeds back into life, so there is no loop for
+		/// the lag to oscillate in.
+		///
+		/// <b>The ref health parameter would be the WRONG source</b>, tempting as it looks. At this point
+		/// it holds only the contributions of THIS ModPlayer (TalentPlayer) — tML CombineWith's every
+		/// other ModPlayer's afterwards — so reading it would silently miss every point of Strength and
+		/// the entire mastery tree. statLifeMax2 is the only place the combined total exists.
+		///
+		/// Base rather than Flat, so MaxManaPercent scales it, mirroring why Strength uses Base
+		/// (CLAUDE.md §5).
+		///
+		/// No Juggernaut collision to worry about: it zeroes statManaMax2 every frame, but both talents
+		/// are in the pinnacle slot and so are mutually exclusive by construction.
 		/// </summary>
-		private bool IsPlanted => ticksStandingStill >= PlantTicks;
+		public override void ModifyMaxStats(Player player, ref StatModifier health, ref StatModifier mana)
+		{
+			mana.Base += player.statLifeMax2 * ManaPerMaxLifeFraction;
+		}
 
 		public override void OnDeactivate(Player player)
 		{
@@ -167,10 +199,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		{
 			instances.Clear();
 			accumulatedDamage = 0f;
-
-			// Zero rather than full: the doubling must be re-earned by actually standing still. Handing
-			// it out at respawn would have it live the instant you drop in.
-			ticksStandingStill = 0;
+			critPurgeCooldown = 0;
 
 			int buffType = ModContent.BuffType<StaggerDebuff>();
 			if (player.HasBuff(buffType))
@@ -178,55 +207,149 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// The healing half: run and your regeneration doubles. Applies to the flat component only —
-		/// gear, buffs, and this talent's own +8/s, taking it to 16.
+		/// Stand still and your regeneration doubles. Applies to the flat component only — gear, buffs,
+		/// and this talent's own +8/s, taking it to 16. It is unconditional: there is no bleed gate,
+		/// because there is no longer a cost to gate. A bonus with no downside does not need a window
+		/// in which the downside is fair.
 		///
-		/// <b>There is deliberately no NaturalLifeRegen counterpart, and it would be dead code if there
-		/// were.</b> Vanilla's natural ramp is driven by player.lifeRegenTime, and Player.Hurt zeroes
-		/// that on every call (Player.cs:37838) — including our own bleed's, which fires every few
-		/// ticks. The ramp needs 300 unbroken ticks to reach even its first step, so it sits pinned at
-		/// zero for the entire bleed. Since this trade only ever arms while a bleed is live, doubling
-		/// the ramp would be doubling zero, every time, without exception.
+		/// IsStandingStillForSpecialEffects is vanilla's own definition of stationary (|velocity| under
+		/// 0.05 on both axes) — the one Shiny Stone uses. Read straight off the player here rather than
+		/// cached a hook earlier, because this is the very point in the frame at which vanilla reads it
+		/// for Shiny Stone (Player.cs:24940), so we see the velocity vanilla sees. Deliberately NOT
+		/// gated on itemAnimation == 0 the way Shiny Stone is: planting your feet to swing should still
+		/// heal you.
 		///
-		/// That is also why doubling the flat component is the right lever rather than a compromise:
-		/// vanilla penalises the natural ramp for moving (x0.5 against x1.25 stationary,
-		/// Player.cs:18003) but does nothing of the sort to flat regen. A x2 on the ramp would not even
-		/// reach parity with standing still; a x2 on flat regen means exactly what it says.
+		/// <b>There is deliberately no NaturalLifeRegen counterpart.</b> The flat component is the right
+		/// lever because vanilla already handles the ramp itself: it scales the natural ramp x1.25 while
+		/// stationary against x0.5 while moving (Player.cs:18003), so standing still is rewarded there
+		/// without us touching it. Flat regen has no such vanilla treatment, which is exactly why it is
+		/// the part worth doubling.
 		///
 		/// The lifeRegen > 0 guard is real: a vanilla DoT has already driven it negative by the time we
-		/// run, and doubling a negative would make Poison and On Fire twice as lethal precisely when
-		/// you are trying to escape.
+		/// run, and doubling a negative would make Poison and On Fire twice as lethal.
 		/// </summary>
 		public override void UpdateLifeRegen(Player player)
 		{
-			if (!IsBleeding || IsPlanted || player.lifeRegen <= 0)
+			if (!player.IsStandingStillForSpecialEffects || player.lifeRegen <= 0)
 				return;
 
-			player.lifeRegen = (int)(player.lifeRegen * MovingRegenMultiplier);
+			player.lifeRegen = (int)(player.lifeRegen * StandingStillRegenMultiplier);
 		}
 
 		/// <summary>
-		/// The damage half of the trade, judged at HIT time rather than fire time. That is what makes
-		/// this fair across classes, and it is the whole reason the multiplier is not on GetDamage.
+		/// Mana only comes back when you plant your feet. Without this the talent does not exist.
 		///
-		/// <b>The trap this avoids.</b> Terraria snapshots a projectile's damage when it spawns
-		/// (Projectile.cs:93467), so a GetDamage multiplier would let a ranged player stop for a single
-		/// frame, fire, and move off with a full-damage projectile in flight. Minions and sentries are
-		/// the opposite — they recalculate from live player stats every frame
-		/// (Projectile.cs:15924) — so a summoner would eat the penalty constantly with no counterplay,
-		/// and melee, computed at contact, would eat it in full too. The penalty would land hardest on
-		/// the classes that kite worst and let the best kiters off free.
+		/// <b>The problem this solves.</b> Vanilla's mana regeneration is PROPORTIONAL to the pool —
+		/// which is the property that made mana worth tying to max life in the first place, and is
+		/// also what made the bleed invisible. UpdateManaRegen computes
+		/// <c>manaRegen = statManaMax2/3 + 1</c> <i>per frame</i>, and 120 accumulated points is one
+		/// mana, so the pool refills at roughly <c>pool/5.2</c> per second moving and <c>pool/2.6</c>
+		/// standing still — about 122 and 244 mana/s at a 638 pool, against a bleed that drains 0.2 to
+		/// 53/s. The pool refilled from empty in 4.4 seconds and could not visibly move.
 		///
-		/// ModifyHitNPCWithProj routes through ModifyHitNPC (PlayerLoader.cs:1606), so this one hook
-		/// covers melee, ranged, magic and minions alike, and every one of them is judged on where the
-		/// player actually is when the damage lands.
+		/// <b>Enlarging or shrinking the pool cannot fix that</b>, which is the trap worth remembering:
+		/// regen scales with the pool by exactly the same factor, so ManaPerMaxLifeFraction only sets
+		/// how big a burst the pool absorbs, never how scarce it is. The refill RATE is the only dial
+		/// that changes scarcity, and vanilla gives us no hook for it — ModPlayer has no mana-regen
+		/// hook at all (only ModifyMaxStats/GetHealMana/ModifyManaCost/OnMissingMana/OnConsumeMana).
+		///
+		/// <b>Why manaRegenBonus is nonetheless the right seam.</b> Vanilla reads it as a plain addend
+		/// BEFORE the standing-still bonus is added:
+		/// <code>
+		///     manaRegen = statManaMax2/3 + 1 + manaRegenBonus;
+		///     if (IsStandingStillForSpecialEffects || grappling[0] >= 0 || manaRegenBuff)
+		///         manaRegen += statManaMax2/3;               // <- AFTER the bonus
+		/// </code>
+		/// so subtracting exactly the base term zeroes the passive drip while leaving the standing-still
+		/// term untouched. Planting your feet does not merely double the regen any more — it is the
+		/// entire regen. That is the talent's whole thesis, and it costs one line rather than a custom
+		/// resource, keeping vanilla's num2 spiral (20% at empty vs 100% at full) and its
+		/// emptier-means-longer regen delay for free.
+		///
+		/// <b>Contributed from PostUpdateMiscEffects, and it must be.</b> ResetEffects zeroes
+		/// manaRegenBonus (:323) and UpdateManaRegen reads it (Update:1637), which runs immediately
+		/// AFTER PostUpdateMiscEffects (:1634). Contributing from ResetEffects would race the wipe; §8's
+		/// CombatEffectStats rule is the same shape.
+		///
+		/// <b>Unconditional, NOT gated on bleeding</b> — hence its position above the instances.Count
+		/// early-return. Gated, the pool would refill at the full 122/s the instant the last bleed
+		/// expired, which is a 5.5s wait for a full reservoir and no cost at all.
+		///
+		/// <b>RegenSuppression must stay in [0,1].</b> At 1 we subtract exactly the base term and
+		/// manaRegen floors at the literal +1 vanilla adds. Above 1 manaRegen goes negative,
+		/// manaRegenCount drifts negative without bound (the <c>while (manaRegenCount >= 120)</c> payout
+		/// simply never fires), and the pool would then owe that debt back before the first point of
+		/// mana ever returned.
+		///
+		/// Two escape hatches survive on purpose, both costing the player something real: a Mana
+		/// Regeneration potion sets manaRegenBuff, which vanilla treats exactly like standing still, so
+		/// it buys mobile regen for a buff slot; and Mana Potions write statMana directly and are
+		/// untouched by any of this, which keeps them the panic button the design intends.
+		///
+		/// Untested first guess, like every other constant here.
 		/// </summary>
-		public override void ModifyHitNPC(Player player, NPC target, ref NPC.HitModifiers modifiers)
+		private const float RegenSuppression = 1f;
+
+		private void SuppressPassiveManaRegen(Player player)
 		{
-			if (!IsBleeding)
+			player.manaRegenBonus -= (int)(player.statManaMax2 / 3f * RegenSuppression);
+		}
+
+		/// <summary>
+		/// The crit purge's cooldown.
+		///
+		/// PostUpdate rather than PostUpdateMiscEffects, which is where the rest of this talent's
+		/// per-frame work lives: that hook returns early when there is no live bleed, so counting down
+		/// there would stall the cooldown exactly while the player is NOT bleeding — i.e. it would still
+		/// be running when the next hit lands, which is the one moment it must not be.
+		/// </summary>
+		public override void PostUpdate(Player player)
+		{
+			if (critPurgeCooldown > 0)
+				critPurgeCooldown--;
+		}
+
+		/// <summary>
+		/// Critical hits burn the bleed off. The third answer to your own stagger, alongside standing
+		/// still and simply out-lasting it — and the only one that is offensive, which is what stops the
+		/// talent from being purely a question of whether you can afford to stand still.
+		///
+		/// <b>Both numbers are scaled, not just the remaining total.</b> RemainingDamage alone would leave
+		/// DamagePerSecond untouched, so the bleed would keep draining at full rate and merely finish 25%
+		/// sooner — the same damage-per-second in a shorter window, which is not what "burn 25% of it"
+		/// means and is barely a defensive gain at all. Scaling the rate by the same fraction keeps the
+		/// 5.5s shape and makes the bleed genuinely weaker.
+		///
+		/// It also avoids a subtler trap: instances are only ever removed when TimeRemaining runs out, not
+		/// when RemainingDamage hits zero, so a purged-to-empty instance would otherwise linger as a
+		/// zombie holding one of the MaxInstances slots that gate whether new hits get staggered at all.
+		/// At 25% per purge nothing reaches zero, but the invariant is worth not depending on.
+		///
+		/// StaggerInstance is a class, so mutating through the loop variable writes through — no
+		/// store-back needed, same as the tick loop in PostUpdateMiscEffects.
+		///
+		/// This covers melee, ranged, magic and minions alike: ModifyHitNPCWithProj routes through
+		/// OnHitNPC, and TalentPlayer dispatches it for every source.
+		/// </summary>
+		public override void OnHitNPC(Player player, NPC target, NPC.HitInfo hit, int damageDone)
+		{
+			if (!hit.Crit || critPurgeCooldown > 0 || instances.Count == 0)
 				return;
 
-			modifiers.FinalDamage *= IsPlanted ? PlantedDamageMultiplier : MovingDamageMultiplier;
+			float purged = 0f;
+			foreach (StaggerInstance instance in instances)
+			{
+				float removed = instance.RemainingDamage * CritPurgeFraction;
+				instance.RemainingDamage -= removed;
+				instance.DamagePerSecond *= 1f - CritPurgeFraction;
+				purged += removed;
+			}
+
+			critPurgeCooldown = CritPurgeCooldownTicks;
+
+			// Only worth announcing if it actually removed something a player could notice.
+			if (purged >= 1f && Main.netMode != Terraria.ID.NetmodeID.Server)
+				CombatText.NewText(player.getRect(), Color.Cyan, $"{(int)purged} Purged", false, false);
 		}
 
 		public override void ModifyHurt(Player player, ref Player.HurtModifiers modifiers)
@@ -248,6 +371,29 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 				return;
 			}
 
+			// The cliff: no mana, no stagger. Mana is what the bleed is paid from, so with an empty pool
+			// there is nothing to arm the split and the hit lands whole. Checked here, before mitigating,
+			// for exactly the same reason as the instance cap above.
+			//
+			// Note this is deliberately binary on EXISTENCE, not sufficiency: one point of mana buys a
+			// full 55% split, and only a genuinely empty pool disarms it. Mana's quantity is what decides
+			// how much of the resulting bleed it can absorb (see PostUpdateMiscEffects); mana's existence
+			// is what decides whether there is a bleed at all. Gating on "enough mana to cover the whole
+			// hit" instead would make the talent switch off hardest precisely when a big hit lands, which
+			// is when the player needs the window most.
+			//
+			// The cliff has a way out of itself, and it falls out of this early return rather than being
+			// built: bailing here leaves pendingStaggerPercent at 0, so PostHurt early-returns too and
+			// never reaches the manaRegenDelay line. An empty pool therefore keeps regenerating even while
+			// you are being hit — slowly, at UpdateManaRegen's 20%-when-empty rate — and the first point of
+			// mana re-arms the split. Worth preserving: without it the twin spirals (20% rate AND a ~199
+			// tick delay at empty) could make a bottomed-out pool unrecoverable mid-fight.
+			if (player.statMana <= 0)
+			{
+				pendingStaggerPercent = 0f;
+				return;
+			}
+
 			pendingStaggerPercent = DamagePercent;
 			modifiers.FinalDamage *= 1f - pendingStaggerPercent;
 		}
@@ -258,9 +404,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			if (applyingStaggerDamage)
 				return;
 
-			// Nothing here touches the stance timer. Being hit does not itself break your stance — the
-			// knockback the hit carries does, by moving you. A hit that lands without knockback leaves
-			// you planted, which is correct: you did not move.
 			if (pendingStaggerPercent <= 0f)
 				return;
 
@@ -284,26 +427,34 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 			player.AddBuff(ModContent.BuffType<StaggerDebuff>(), 60 * (int)Duration + 60);
 
+			// Suppress mana regeneration the way a spell cast would. We drain statMana directly rather
+			// than through Player.CheckMana, and CheckMana does not touch the delay anyway — vanilla sets
+			// it from ItemCheck_ApplyManaRegenDelay, which does exactly this:
+			//     if (GetManaCost(sItem) > 0) manaRegenDelay = (int)maxRegenDelay;
+			// so mirroring it (int cast included) is the closest thing to a "we spent mana" signal there
+			// is. While the delay is above zero, UpdateManaRegen sets manaRegen = 0 outright.
+			//
+			// maxRegenDelay is vanilla's own, recomputed every frame in Player.Update as
+			//     ((1 - statMana/statManaMax2) * 240 + 45) * 0.7
+			// i.e. ~31 ticks at a full pool and ~199 at an empty one. Using it rather than a constant of
+			// our own is the whole point: the delay gets LONGER the emptier you are, which stacks with
+			// UpdateManaRegen's 20%-at-empty rate to punish a mismanaged pool on a curve vanilla already
+			// tuned. That is the resource minigame, and we get it for free.
+			//
+			// Tied to being HIT rather than to each drain tick on purpose. The bleed ticks several times a
+			// second for 5.5s, so refreshing the delay per tick would pin regeneration at zero for the
+			// entire window and feed the cliff. "Stop taking hits and the pool comes back" is the intent.
+			//
+			// Max, not assignment: never SHORTEN a delay the player already owes from casting.
+			player.manaRegenDelay = System.Math.Max(player.manaRegenDelay, (int)player.maxRegenDelay);
+
 			if (Main.netMode != Terraria.ID.NetmodeID.Server)
 				CombatText.NewText(player.getRect(), Color.Orange, $"{(int)staggeredDamage} Staggered", false, false);
 		}
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
-			// IsStandingStillForSpecialEffects is vanilla's own definition of stationary (|velocity|
-			// under 0.05 on both axes) — the one Shiny Stone uses. Counted here rather than in
-			// PostUpdate because Player.Update runs PostUpdateMiscEffects immediately before
-			// UpdateLifeRegen (Player.cs:24940), and UpdateLifeRegen reads the result; that is the same
-			// point in the frame at which vanilla reads this property for Shiny Stone, so we see the
-			// velocity vanilla sees. Clamped rather than left to climb, so it cannot overflow across a
-			// long session.
-			//
-			// Deliberately NOT gated on itemAnimation == 0 the way Shiny Stone is: planting your feet
-			// to swing is the entire point of the stance. Only movement breaks it.
-			if (!player.IsStandingStillForSpecialEffects)
-				ticksStandingStill = 0;
-			else if (ticksStandingStill < PlantTicks)
-				ticksStandingStill++;
+			SuppressPassiveManaRegen(player);
 
 			if (instances.Count == 0)
 			{
@@ -342,17 +493,37 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 				int toApply = (int)accumulatedDamage;
 				accumulatedDamage -= toApply;
 
-				applyingStaggerDamage = true;
-				try
+				// Mana pays first — this is the talent. When the pool covers the tick we never reach
+				// Player.Hurt at all, which means no re-entrancy, no invulnerability frames, no knockback
+				// and no death check: the damage simply never becomes damage. Written straight to statMana
+				// rather than through CheckMana because CheckMana is an item-cost API (it applies
+				// manaCost, consults the Mana Flower, and fires OnConsumeMana) and none of that describes
+				// a bleed being absorbed.
+				if (player.statMana > 0)
 				{
-					player.Hurt(
-						Terraria.DataStructures.PlayerDeathReason.ByCustomReason(
-							NetworkText.FromLiteral(player.name + " was staggered to death.")),
-						toApply, 0, false, false, -1, false, 0);
+					int fromMana = System.Math.Min(player.statMana, toApply);
+					player.statMana -= fromMana;
+					toApply -= fromMana;
 				}
-				finally
+
+				// Whatever mana could not cover still has to land. A pool that outlives its mana is a debt
+				// already owed: the cliff in ModifyHurt governs whether NEW hits get split, but refusing
+				// to resolve an EXISTING bleed here would turn an empty pool into infinite free
+				// mitigation, which is the exact bug the instance-cap comment warns about.
+				if (toApply > 0)
 				{
-					applyingStaggerDamage = false;
+					applyingStaggerDamage = true;
+					try
+					{
+						player.Hurt(
+							Terraria.DataStructures.PlayerDeathReason.ByCustomReason(
+								NetworkText.FromLiteral(player.name + " was staggered to death.")),
+							toApply, 0, false, false, -1, false, 0);
+					}
+					finally
+					{
+						applyingStaggerDamage = false;
+					}
 				}
 			}
 
@@ -394,20 +565,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			return longest;
 		}
 
-		/// <summary>
-		/// Which side of the trade is live right now, for the buff tooltip.
-		///
-		/// This is worth surfacing rather than leaving to be felt: the two stances are a 3x swing in
-		/// damage dealt, and a player who cannot see which one they are in reads that as their damage
-		/// numbers randomly tripling.
-		/// </summary>
-		public string GetStanceText()
-		{
-			return IsPlanted
-				? "Planted: +50% damage"
-				: "Moving: double regeneration, half damage";
-		}
-
 		private class StaggerInstance
 		{
 			public float RemainingDamage { get; set; }
@@ -443,8 +600,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			{
 				if (behaviour is StaggerTalent stagger)
 				{
+					Player player = Main.LocalPlayer;
+
+					// The mana line is the important one and is deliberately live: the pool is what
+					// decides whether this bleed costs anything at all, so the player needs to watch it
+					// draining against the debt, not be told a static rule about it. The last line is
+					// static because both of those effects always apply.
+					// The stance line is live because the pool only refills while planted — the player
+					// needs to see which of the two states they are actually in, not be told the rule.
+					bool planted = player.IsStandingStillForSpecialEffects;
+
 					tip = $"Taking {(int)stagger.GetTotalStaggeredDamage()} damage over {stagger.GetLongestStaggerDuration():F1} seconds"
-						+ $"\n{stagger.GetStanceText()}";
+						+ $"\nPaid from mana: {player.statMana}/{player.statManaMax2}"
+						+ (planted ? "\nPlanted — mana flooding back" : "\nMoving — mana will NOT recover")
+						+ "\nCritical hits burn 25% of it";
 					return;
 				}
 			}

@@ -145,27 +145,40 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			// getting hit and buy it back by swinging, and the more you are losing the better the
 			// exchange rate gets.
 			//
-			// Routed through the shared channel rather than applied per-heal-site, so it reaches
-			// every discrete heal at once: potions (CombatEffectStats.GetHealLife), leech and the
-			// Devourer kill-burst (LifeLeechApplier). Both of those read in hooks that run after this
-			// one, so the value is populated by the time they look — see the ordering note on
-			// CombatEffectStats.
-			CombatEffectStats.Get(player).HealingPercent += bonus * 100f;
+			// <b>ConsumableHealingPercent, NOT HealingPercent, and the distinction is the whole bug.</b>
+			// Leech does not need this to ramp — it ALREADY does, because ResetEffects above multiplies
+			// GetDamage by the same (1 + bonus), so the ramp is baked into the damageDone that
+			// LifeLeechApplier takes its 30% of. Contributing to HealingPercent as well fed the ramp in
+			// a SECOND time on the payout, making a full-ramp heal 0.30 * baseHit * (1+r)^2 — 4x, where
+			// this talent's own docs promise 2x. Potions are the one heal with no damageDone to have
+			// ridden in on, which is why they get their own channel rather than losing the bonus.
+			CombatEffectStats.Get(player).ConsumableHealingPercent += bonus * 100f;
+		}
 
-			// Regen is amplified HERE rather than by folding it into HealingPercent, for two reasons.
-			// Ordering: CombatEffectStats and TalentPlayer are separate ModPlayers with no defined
-			// order between them, so a reader in CombatEffectStats.PostUpdateMiscEffects could run
-			// before this contributes. And scope: HealingPercent is also fed by item modifiers, and
-			// silently making that stat scale regeneration would quietly redefine the "Healing" roll
-			// and duplicate what LifeRegenPercent already means.
-			//
-			// Guarded on > 0 for the reason StatApplier's LifeRegenPercent case is: lifeRegen goes
-			// NEGATIVE while a DoT ticks, so an unguarded multiply would make Bleeding/Poison/On Fire
-			// proportionally more lethal the closer to death you got — the exact inverse of this
-			// talent. Applied from PostUpdateMiscEffects to match where LifeRegenPercent already does
-			// the same job.
-			if (player.lifeRegen > 0)
-				player.lifeRegen += (int)Math.Round(player.lifeRegen * bonus);
+		/// <summary>
+		/// The regeneration half of the ramp.
+		///
+		/// <b>This hook, not PostUpdateMiscEffects.</b> It used to live there, alongside the healing
+		/// contribution, which made it very nearly dead code: PostUpdateMiscEffects runs immediately
+		/// BEFORE UpdateLifeRegen, so at that point lifeRegen holds nothing but StatApplier's own flat
+		/// "LifeRegen" case — none of the gear or buff regeneration this is supposed to be scaling has
+		/// been added yet. TalentBehaviour.UpdateLifeRegen documents this, and StaggerTalent already
+		/// follows it. The old placement justified itself by matching StatApplier's LifeRegenPercent
+		/// case, which has the same bug and is logged in todo.md as a separate fix.
+		///
+		/// Guarded on > 0 for the reason StatApplier's LifeRegenPercent case is: lifeRegen goes
+		/// NEGATIVE while a DoT ticks, so an unguarded multiply would make Bleeding/Poison/On Fire
+		/// proportionally more lethal the closer to death you got — the exact inverse of this talent.
+		/// Note the guard only became MEANINGFUL with the move: from PostUpdateMiscEffects it was
+		/// protecting against a negative that could not exist yet.
+		/// </summary>
+		public override void UpdateLifeRegen(Player player)
+		{
+			float bonus = GetCurrentBonus(player);
+			if (bonus <= 0f || player.lifeRegen <= 0)
+				return;
+
+			player.lifeRegen += (int)Math.Round(player.lifeRegen * bonus);
 		}
 
 		/// <summary>Raw damage taken inside the window. What the HUD prints.</summary>

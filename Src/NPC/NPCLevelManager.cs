@@ -33,13 +33,19 @@ namespace ProgressionExpanded.Src.NPCs
 		private const float MIN_XP_MULTIPLIER = 0.1f;
 		private const float MAX_XP_MULTIPLIER = 1.0f;
 
+		// Per-NPC stat scaling, applied to the LEVEL OFFSET (deviation from the world baseline),
+		// never to the absolute level — see LevelOffset() for why that distinction is load-bearing.
+		private const float HEALTH_PER_LEVEL_OFFSET = 0.05f;   // +5% health per level above the baseline
+		private const float DEFENSE_PER_LEVEL_OFFSET = 0.02f;  // +2% defense per level above the baseline
+
 		// Level-difference COMBAT scaling.
 		// Player -> enemy: you deal extra damage to enemies below your level (gentle ramp).
 		private const float PLAYER_DAMAGE_PER_LEVEL_BELOW = 0.10f; // +10% per level the enemy is below you
 		private const float PLAYER_DAMAGE_MAX_MULTIPLIER = 3.0f;   // cap (reached ~20 levels below)
-		// Enemy -> player: enemies above your level hit much harder — scales hard and fast.
-		private const float ENEMY_DAMAGE_PER_LEVEL_ABOVE = 0.20f;  // +20% per level the enemy is above you
-		private const float ENEMY_DAMAGE_MAX_MULTIPLIER = 5.0f;    // cap so it stays survivable
+		// Enemy -> player: see GetEnemyDamageMultiplier. This is in practice a DEPTH tax, not a
+		// level-difference mechanic, so it is a flavour signal rather than a wall. Was 0.20f/5.0f.
+		private const float ENEMY_DAMAGE_PER_LEVEL_ABOVE = 0.05f;  // +5% per level the enemy is above you
+		private const float ENEMY_DAMAGE_MAX_MULTIPLIER = 1.5f;    // cap; see below for when it binds
 
 		// --- Level-assignment range (squished to world level ±MAX_LEVEL_OFFSET, biased upward by
 		// depth & danger biome; overworld hugs the world level). All tunable. ---
@@ -215,7 +221,12 @@ namespace ProgressionExpanded.Src.NPCs
 		#region Scaling
 
 		/// <summary>
-		/// Apply stat scaling based on NPC level
+		/// Apply stat scaling based on NPC level.
+		///
+		/// ⚠️ <b>The world level must be charged exactly ONCE here.</b> The World*Multiplier values
+		/// below are already functions of world level; the per-NPC term must therefore describe only
+		/// how far <i>this</i> enemy deviates from the world baseline, never its absolute level.
+		/// See <see cref="LevelOffset"/>.
 		/// </summary>
 		private void ApplyLevelScaling(Terraria.NPC npc)
 		{
@@ -228,21 +239,46 @@ namespace ProgressionExpanded.Src.NPCs
 			float healthMultiplier = WorldLevelManager.GetEnemyHealthMultiplier();
 			float damageMultiplier = WorldLevelManager.GetEnemyDamageMultiplier();
 
-			// Apply additional NPC-specific level scaling
-			int levelDifference = npcLevel - 1; // Difference from base level 1
-			
-			// Health scales with level (5% per level)
-			float levelHealthMultiplier = 1.0f + (levelDifference * 0.05f);
+			int levelOffset = LevelOffset();
+
+			// Health scales with the offset (5% per level of deviation from the world baseline).
+			float levelHealthMultiplier = 1.0f + (levelOffset * HEALTH_PER_LEVEL_OFFSET);
 			npc.lifeMax = (int)(npc.lifeMax * healthMultiplier * levelHealthMultiplier);
 			npc.life = npc.lifeMax;
 
-			// Damage scales with level (4% per level)
-			float levelDamageMultiplier = 1.0f + (levelDifference * 0.04f);
-			npc.damage = (int)(npc.damage * damageMultiplier * levelDamageMultiplier);
+			// Damage takes the world multiplier and NOTHING else.
+			//
+			// ⚠️ There is deliberately no per-NPC damage term here, and adding one back is a bug.
+			// It would double-count the offset: GetEnemyDamageMultiplier(npcLevel, playerLevel) in
+			// ModifyHitPlayer already scales damage by exactly that offset (playerLevel tracks
+			// worldLevel — see the comment there), so a term here would charge it a second time.
+			// Health and defense have no such counterpart, which is why they keep theirs.
+			npc.damage = (int)(npc.damage * damageMultiplier);
 
-			// Defense scales with level (2% per level)
-			float levelDefenseMultiplier = 1.0f + (levelDifference * 0.02f);
+			// Defense scales with the offset (2% per level of deviation).
+			float levelDefenseMultiplier = 1.0f + (levelOffset * DEFENSE_PER_LEVEL_OFFSET);
 			npc.defense = (int)(npc.defense * levelDefenseMultiplier);
+		}
+
+		/// <summary>
+		/// How far this enemy deviates from the world baseline — i.e. the depth/biome offset that
+		/// <see cref="InitializeLevel"/> rolled, in <c>[-MAX_LEVEL_OFFSET, +MAX_LEVEL_OFFSET]</c>.
+		///
+		/// ⚠️ <b>This used to be <c>npcLevel - 1</c>, and that was a live balance bug.</b>
+		/// <c>npcLevel = worldLevel + offset</c>, so <c>npcLevel - 1</c> is dominated by the world
+		/// level — which <see cref="ApplyLevelScaling"/> has *already* applied via the
+		/// World*Multiplier values. The world level was therefore charged twice, as a product:
+		/// ×1.5 inflation at WL8, ×2.0 at WL20, ×5.2 at WL100, uncapped and compounding. Reading the
+		/// offset instead charges it once and gives the term the meaning it was always supposed to
+		/// have. Model: <c>.scripts/enemy_damage_scaling.py</c>; write-up: <c>todo.md</c> §3a.
+		///
+		/// Negative for enemies below the world baseline (surface spread), which is intended — a
+		/// level-<c>WL-2</c> enemy should be slightly weaker than the baseline, not merely less strong
+		/// than a deep one.
+		/// </summary>
+		private int LevelOffset()
+		{
+			return npcLevel - WorldLevelManager.GetWorldLevel();
 		}
 
 		#endregion
@@ -324,9 +360,26 @@ namespace ProgressionExpanded.Src.NPCs
 
 		/// <summary>
 		/// Multiplier for damage this ENEMY deals to the player, based on level difference.
-		/// Enemies above the player hit much harder and it scales up hard and fast for each
-		/// level above (e.g. +5 -> 2x, +10 -> 3x); at or below the player it is normal.
-		/// Capped at ENEMY_DAMAGE_MAX_MULTIPLIER so it stays survivable.
+		///
+		/// ⚠️ <b>Despite the name, this is a DEPTH tax, not a level-difference mechanic — know that
+		/// before tuning it.</b> <c>PlayerLevelManager.OnLevelUp</c> calls
+		/// <c>WorldLevelManager.IncreaseWorldLevel(1)</c> on every level-up, so <c>playerLevel</c>
+		/// and <c>worldLevel</c> track each other by construction. <c>InitializeLevel</c> then sets
+		/// <c>enemyLevel = worldLevel + offset</c>. The subtraction below therefore cancels the world
+		/// level out entirely and reduces to <b>the depth/biome offset alone</b> — which is biased
+		/// upward and never downward on average. So this is "you are in a cavern", not "you punched
+		/// above your weight", and the player's counterpart
+		/// (<see cref="GetPlayerDamageMultiplier"/>) can essentially never fire underground because
+		/// enemies are essentially never below the baseline down there.
+		///
+		/// That is why the rate is 5%/level and not the 20% it was: at the ±6 clamp it is a ×1.30
+		/// flavour signal rather than the ×2.20 wall it used to be. Fixing the *asymmetry* properly
+		/// means deciding what this multiplier is for — see <c>todo.md</c> §3a.
+		///
+		/// ⚠️ <b>The cap is not dead code, even though the ±6 clamp puts the natural maximum at
+		/// ×1.30.</b> World level is per-world and append-only, so a second character levelling in
+		/// the same world pushes <c>worldLevel</c> above that character's <c>playerLevel</c> and the
+		/// difference stops being bounded by the clamp. The cap is the backstop for that.
 		/// </summary>
 		public static float GetEnemyDamageMultiplier(int enemyLevel, int playerLevel)
 		{

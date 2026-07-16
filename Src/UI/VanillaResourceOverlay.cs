@@ -19,11 +19,11 @@ namespace ProgressionExpanded.Src.UI
 			if (config == null)
 				return false;
 
-			// Hearts only hide while the custom bar is actually there to replace them, so the two
-			// toggles can't combine into no health readout at all.
+			// Each vanilla display only hides while the custom bar is actually there to replace it, so
+			// the two toggles can't combine into no readout at all.
 			return drawingLife
 				? config.HideVanillaHearts && config.ShowCustomHealthBar
-				: config.HideVanillaMana;
+				: config.HideVanillaMana && config.ShowCustomManaBar;
 		}
 
 		public override bool PreDrawResourceDisplay(PlayerStatsSnapshot snapshot, IPlayerResourcesDisplaySet displaySet, bool drawingLife, ref Color textColor, out bool drawText)

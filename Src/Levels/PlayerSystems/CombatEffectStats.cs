@@ -39,6 +39,23 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// <summary>Percent increase to healing you receive (our heal procs + potions).</summary>
 		public float HealingPercent;
 
+		/// <summary>
+		/// Percent increase to healing from CONSUMABLES only. <see cref="GetHealLife"/> is its sole
+		/// consumer — <see cref="LifeLeechApplier"/> deliberately does NOT read it.
+		///
+		/// This channel exists because of one specific hazard. A source that already scales leech
+		/// through <c>damageDone</c> must not ALSO scale the payout, or the same bonus enters the
+		/// calculation twice and the result is squared rather than doubled. Vengeance is exactly that
+		/// source: its ramp multiplies GetDamage in ResetEffects, so by the time LifeLeechApplier takes
+		/// its 30% of damageDone the ramp is already in there. Contributing the ramp to HealingPercent
+		/// as well made a full-ramp heal 4x instead of the intended 2x.
+		///
+		/// So the rule is: if your bonus already reaches leech via the damage you dealt, contribute
+		/// HERE. If it is a genuine "healing received" bonus that leech should also see (the item
+		/// "Healing" roll), contribute to <see cref="HealingPercent"/>. See CLAUDE.md §8.
+		/// </summary>
+		public float ConsumableHealingPercent;
+
 		/// <summary>Percent increase to on-hit ailment/DoT effect (debuff durations).</summary>
 		public float AilmentPercent;
 
@@ -64,6 +81,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		{
 			LifeLeechPercent = 0f;
 			HealingPercent = 0f;
+			ConsumableHealingPercent = 0f;
 			AilmentPercent = 0f;
 			AreaPercent = 0f;
 			Array.Clear(ElementalConversion, 0, ElementalConversion.Length);
@@ -73,13 +91,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		public static CombatEffectStats Get(Player player) => player.GetModPlayer<CombatEffectStats>();
 
 		/// <summary>
-		/// Amplify potion (and other item) healing by <see cref="HealingPercent"/>, so "healing"
-		/// gear affects all self-healing, not just the Bloodthirst proc.
+		/// Amplify potion (and other item) healing, so "healing" gear affects all self-healing, not
+		/// just the Bloodthirst proc.
+		///
+		/// Reads BOTH channels: this is the one site where a general healing bonus and a
+		/// leech-scaling one mean the same thing, because a potion has no damageDone for the latter to
+		/// have already ridden in on. See <see cref="ConsumableHealingPercent"/> for why they are
+		/// otherwise separate.
 		/// </summary>
 		public override void GetHealLife(Item item, bool quickHeal, ref int healValue)
 		{
-			if (HealingPercent != 0f && healValue > 0)
-				healValue += (int)Math.Round(healValue * HealingPercent / 100f);
+			float total = HealingPercent + ConsumableHealingPercent;
+			if (total != 0f && healValue > 0)
+				healValue += (int)Math.Round(healValue * total / 100f);
 		}
 	}
 }
