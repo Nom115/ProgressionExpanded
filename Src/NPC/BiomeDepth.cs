@@ -47,6 +47,28 @@ namespace ProgressionExpanded.Src.NPCs
 			return player != null && (player.ZoneCorrupt || player.ZoneCrimson);
 		}
 
+		/// <summary>
+		/// True when the nearest player within <see cref="BiomeRange"/> is standing in the desert,
+		/// surface or underground. Read the same way as <see cref="IsEvilBiome"/>; it gates the Desert
+		/// affix pool.
+		///
+		/// <b>ZoneDesert alone covers the Underground Desert.</b> Vanilla only ever sets
+		/// ZoneUndergroundDesert inside <c>if (behindBackWall &amp;&amp; ZoneDesert &amp;&amp; ...)</c>
+		/// (<c>Player.cs:15318</c>), so it is a strict subset and testing both would just be the same
+		/// bound written twice.
+		///
+		/// ⚠️ <b>The ZoneBeach exclusion is load-bearing.</b> ZoneDesert is not a biome check — it is
+		/// <c>SandTileCount >= DesertTileThreshold</c> (<c>SceneMetrics:140</c>), and an ocean beach is
+		/// made of sand. Without this, every "desert-only" affix would also roll on the ocean shore.
+		/// ZoneBeach is a positional <c>WorldGen.oceanDepths</c> test (<c>Player.cs:15386</c>), which
+		/// is exactly the carve-out wanted.
+		/// </summary>
+		public static bool IsDesert(Terraria.NPC npc)
+		{
+			Terraria.Player player = NearestPlayer(npc, BiomeRange);
+			return player != null && player.ZoneDesert && !player.ZoneBeach;
+		}
+
 		/// <summary>Nearest active, living player to the NPC within maxRange px, or null.</summary>
 		public static Terraria.Player NearestPlayer(Terraria.NPC npc, float maxRange)
 		{

@@ -166,12 +166,25 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 
 		#region Hooks
 
+		/// <summary>
+		/// The enemy just damaged the player — this is where ailments land. Kept strictly separate from
+		/// the ModifyHitBy* hooks below, which fire when the player attacks the enemy; conflating the
+		/// two is what made every ailment fire backwards until 2026-07-17. See IModifier.OnHitPlayer.
+		/// </summary>
+		public override void OnHitPlayer(Terraria.NPC npc, Terraria.Player target, Terraria.Player.HurtInfo hurtInfo)
+		{
+			foreach (var modifier in modifiers)
+			{
+				modifier.OnHitPlayer(npc, target, hurtInfo);
+			}
+		}
+
 		public override void ModifyHitByItem(Terraria.NPC npc, Terraria.Player player, Item item, ref Terraria.NPC.HitModifiers hitModifiers)
 		{
 			// Apply modifier effects on hit
 			foreach (var modifier in modifiers)
 			{
-				modifier.OnHit(npc, player);
+				modifier.OnHitByPlayer(npc, player);
 			}
 		}
 
@@ -183,7 +196,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 				var player = Main.player[projectile.owner];
 				foreach (var modifier in modifiers)
 				{
-					modifier.OnHit(npc, player);
+					modifier.OnHitByPlayer(npc, player);
 				}
 			}
 		}

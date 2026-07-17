@@ -33,10 +33,16 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// the pool is empty against 100% when it is full, and the post-hit delay is itself longer the emptier
 	/// you are. Letting the pool bottom out is punishing, and it is supposed to be.
 	///
-	/// <b>Three answers, not one.</b> Stand still and vanilla's own doubling refills the pool; crit and
-	/// burn a quarter of the bleed off outright; or simply out-last it behind 150% more defense. The
-	/// talent asks whether you can afford to stop, whether you can land a crit, and whether you budgeted
-	/// your mana — and it is a wall only for as long as all three answers hold.
+	/// <b>Two answers, not three.</b> Stand still and vanilla's own doubling refills the pool, or crit
+	/// and burn a quarter of the bleed off outright. The talent asks whether you can afford to stop,
+	/// whether you can land a crit, and whether you budgeted your mana — and it is a wall only for as
+	/// long as those answers hold.
+	///
+	/// There used to be a third: out-last the bleed behind 150% more defense. That was removed on
+	/// 2026-07-17 (see percentBonuses), and its removal is the point — the defense was doing so much
+	/// of the work that this talent was the only pinnacle that functioned against bosses, which is
+	/// what made the other two feel broken by comparison. The pool is now the answer, not a garnish
+	/// on top of an armour wall.
 	///
 	/// <b>Why no damage lever.</b> A move/plant damage trade made this a positioning minigame with an
 	/// offensive upside, which is neither what the talent is for nor what separates it from its
@@ -53,7 +59,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Stagger";
 
 		public override string Description =>
-			"150% more defense, +150 maximum life and +8 life regeneration per second. Your maximum mana "
+			"+150 maximum life and +8 life regeneration per second. Your maximum mana "
 			+ "is increased by 50% of your maximum life. 55% of the damage you take is dealt to you over "
 			+ "5.5 seconds instead of all at once, and that damage is drained from your mana before it "
 			+ "touches your life — but only while you have mana left to arm it. Critical hits burn away "
@@ -63,7 +69,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
-		private const float DefenseBonus = 1.50f;
 		private const float FlatLife = 150f;
 
 		/// <summary>
@@ -103,16 +108,31 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float StandingStillRegenMultiplier = 2f;
 
 		/// <summary>
-		/// DefensePercent multiplies a Player.DefenseStat, which tracks adds and multiplies
-		/// separately — so this is genuinely "more" defense and compounds with Bone Armor (x1.5) and
-		/// Avatar of Flesh (x1.5) rather than summing with them. Worth watching in play: that stack
-		/// reaches roughly x5.6 defense, and Bone Armor converts defense into flat damage, so this
-		/// talent feeds that pick's offence as well as its own defence.
+		/// Empty, and deliberately so — see below.
+		///
+		/// <b>Stagger used to grant 150% more defense, and it was removed on 2026-07-17.</b> That
+		/// x2.5 was the single largest number in the pinnacle slot and it is why play-test found this
+		/// talent to be "the only one that has a chance" against bosses while the other two felt
+		/// "incredibly squishy". The problem was not that 1.50 was too big; it is that defense is
+		/// SUBTRACTIVE and vanilla floors damage to 1 before FinalDamage, so spreading three talents
+		/// from x0.7 to x2.5 across it produced a cliff rather than a gradient. At WL20 this talent
+		/// took 62 per Plantera contact and Vengeance took 238; at WL8 this one was outright immune
+		/// (188 defense simply exceeded the raw hit) while Vengeance took 168.
+		///
+		/// The mitigation now lives in ClassBaselines.WarriorEndurance, which every warrior has and
+		/// which is multiplicative — so it cannot produce that cliff. See that class for the full
+		/// reasoning and .scripts/mitigation_model.py for the numbers.
+		///
+		/// <b>Stagger is meant to still lead, but on its mechanic rather than on a stat.</b> The mana
+		/// pool absorbs 55% of every hit before life is touched, which leaves it at ~47 effective
+		/// damage against the other pinnacles' 85-104 — a lead that drains and has to be re-earned,
+		/// rather than one that is simply always on. If it now feels too weak, the lever is
+		/// ManaPerMaxLifeFraction. Do not put the defense back: it will bring the cliff with it.
+		///
+		/// Kept as an empty dictionary rather than deleted because TalentBehaviour expects the
+		/// property, and because a future non-defense percent bonus goes here.
 		/// </summary>
-		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>
-		{
-			{ "DefensePercent", DefenseBonus },
-		};
+		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>();
 
 		/// <summary>
 		/// MaxHealth routes to StatModifier.Base in TalentPlayer.ModifyMaxStats — inside the

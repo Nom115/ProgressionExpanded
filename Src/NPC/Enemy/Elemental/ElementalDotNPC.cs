@@ -68,6 +68,49 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 		/// </summary>
 		private float regenAccumulator;
 
+		/// <summary>
+		/// This enemy's private randomness, from which ElementalResistance derives its per-element
+		/// resistances. Zero means not yet rolled.
+		/// </summary>
+		private int resistanceSeed;
+
+		/// <summary>
+		/// A stable per-enemy seed, rolled on first read.
+		///
+		/// <b>An int, not a float[5], and that is the whole point.</b> EnemyModifierSystem.Clone copies
+		/// its modifier <i>list</i> but shares the IModifier instances, which is why VileSpitModifier's
+		/// shootTimer cross-talks between cloned enemies today. An array of rolled resistances here
+		/// would be a fresh instance of that exact bug. A value type cannot be aliased at all — even a
+		/// maintainer who forgets the Clone line below gets correct behaviour, because MemberwiseClone
+		/// copies it. Same instinct as the lifeRegen-over-SimpleStrikeNPC choice above: make the bug
+		/// class unrepresentable rather than guard against it.
+		///
+		/// <b>Lazy on read, which deletes the ordering question.</b> The only caller is
+		/// ElementalResistance.Get, reached from ElementalDotApplier.OnHitNPC — necessarily long after
+		/// SetDefaults, ScaleStats and every GlobalNPC's OnSpawn. So there is no hook to register, no
+		/// dependence on GlobalNPC ordering, and nothing to initialise: the value materialises when
+		/// first asked for and is fixed forever after. Most enemies never take elemental damage and so
+		/// never roll one at all.
+		///
+		/// Note Bleed returns before reaching this, so a pure-Rend build never allocates a seed.
+		///
+		/// Main.rand makes this client-authoritative and therefore MP-divergent — consistent with the
+		/// rest of the mod, which is single-player by design (see the net-sync limitation in CLAUDE.md
+		/// §7). If MP ever matters, hashing npc.type is the drop-in replacement, at the cost of every
+		/// enemy of a type sharing one set of resistances.
+		/// </summary>
+		public int ResistanceSeed
+		{
+			get
+			{
+				// Excludes 0 so the sentinel can never collide with a legitimately rolled seed.
+				if (resistanceSeed == 0)
+					resistanceSeed = Main.rand.Next(1, int.MaxValue);
+
+				return resistanceSeed;
+			}
+		}
+
 		#region Mutation
 
 		/// <summary>
@@ -123,6 +166,30 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 
 			List<DotInstance> list = instances[(int)element];
 			return list != null && list.Count > 0;
+		}
+
+		/// <summary>
+		/// Whether any element of ours is currently ticking on this enemy.
+		///
+		/// <b>Ask this rather than reading npc.lifeRegen.</b> Vanilla's DoTs are all summed before any
+		/// tModLoader hook runs, so a reader in UpdateLifeRegen sees them reliably — but ours land in
+		/// <i>this</i> GlobalNPC's UpdateLifeRegen, and the order two GlobalNPCs' hooks run in is a
+		/// load-order detail, not a guarantee. A caller reading lifeRegen for our DoTs would therefore
+		/// work or not depending on registration order. State is stable at any point in the frame;
+		/// same "pull, not push" reasoning as TalentSuppression in CLAUDE.md §6.
+		/// </summary>
+		public bool HasAnyInstance()
+		{
+			if (instances == null)
+				return false;
+
+			for (int e = 0; e < instances.Length; e++)
+			{
+				if (instances[e] != null && instances[e].Count > 0)
+					return true;
+			}
+
+			return false;
 		}
 
 		#endregion
@@ -254,6 +321,12 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 			var toGlobal = (ElementalDotNPC)base.Clone(from, to);
 
 			toGlobal.regenAccumulator = fromGlobal.regenAccumulator;
+
+			// A split enemy inherits its parent's resistances rather than rerolling: the two halves of
+			// a worm are the same creature. Safe to copy unconditionally — 0 simply means the parent
+			// never rolled, and the child will roll for itself on first read.
+			toGlobal.resistanceSeed = fromGlobal.resistanceSeed;
+
 			toGlobal.instances = null;
 
 			if (fromGlobal.instances == null)

@@ -4,6 +4,7 @@ using Terraria;
 using ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core;
 using ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Corruption;
 using ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Crimson;
+using ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Desert;
 using ProgressionExpanded.Utils;
 
 namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
@@ -37,7 +38,11 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
 				new IgnitingModifier(),
 				new ChillingModifier(),
 				new ShockingModifier(),
-				new BrutalModifier()
+				new BrutalModifier(),
+				new FlamewardedModifier(),
+				new FrostwardedModifier(),
+				new StormwardedModifier(),
+				new VenomwardedModifier()
 			};
 		}
 
@@ -53,18 +58,34 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
 			var available = new List<IModifier>(allModifiers);
 
 			// Add conditional modifiers
-			var vileSpitModifier = new VileSpitModifier();
 			if (npc != null && VileSpitModifier.CanApply(npc))
 			{
-				available.Add(vileSpitModifier);
-			}
-var leechModifier = new LeechModifier();
-			if (npc != null && LeechModifier.CanApply(npc))
-			{
-				available.Add(leechModifier);
+				available.Add(new VileSpitModifier());
 			}
 
-			
+			if (npc != null && LeechModifier.CanApply(npc))
+			{
+				available.Add(new LeechModifier());
+			}
+
+			// Desert affixes. Unlike VileSpit/Leech — which unlock globally once the evil boss is down —
+			// these stay desert-locked forever, so the biome keeps an identity in the late game.
+			if (npc != null && ParchingModifier.CanApply(npc))
+			{
+				available.Add(new ParchingModifier());
+			}
+
+			if (npc != null && SunbakedModifier.CanApply(npc))
+			{
+				available.Add(new SunbakedModifier());
+			}
+
+			if (npc != null && InfestedModifier.CanApply(npc))
+			{
+				available.Add(new InfestedModifier());
+			}
+
+
 			for (int i = 0; i < count && available.Count > 0; i++)
 			{
 				// Weighted selection

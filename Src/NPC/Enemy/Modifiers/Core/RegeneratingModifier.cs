@@ -14,7 +14,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 			// Stat boost applied, regen handled in UpdateLifeRegen
 		}
 
-		public void OnHit(Terraria.NPC npc, Player player) { }
+		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }
 
 		public void Update(Terraria.NPC npc) { }
 

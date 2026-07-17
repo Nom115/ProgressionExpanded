@@ -9,11 +9,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// Pinnacle: Vengeance. The more you have just been hurt, the harder you hit — and hitting is
 	/// how you heal.
 	///
-	/// Stagger's opposite number. Stagger smooths incoming damage into a flat bleed and stacks
-	/// defense to shrink it; Vengeance sheds defense so hits land hard and fast, banks a huge life
-	/// pool to absorb them, and buys the life back by attacking. The two want contradictory things
-	/// from the same fight — taking a big hit is what turns Vengeance on, and Stagger is what stops
-	/// big hits from happening. Picking one closes the door on the other's playstyle.
+	/// Stagger's opposite number. Stagger smooths incoming damage into a bleed and drains it from a
+	/// mana pool; Vengeance takes hits whole, banks a doubled life pool to absorb them, and buys the
+	/// life back by attacking. The two want contradictory things from the same fight — taking a big
+	/// hit is what turns Vengeance on, and Stagger is what stops big hits from happening. Picking one
+	/// closes the door on the other's playstyle.
+	///
+	/// It used to also shed 30% defense, and that was removed on 2026-07-17 — see percentBonuses.
+	/// The short version: in a subtractive system that penalty was several times more expensive than
+	/// it read, and it deleted the melee range this talent's entire loop depends on.
 	///
 	/// It has no passive sustain on purpose: the life pool is a budget, not a wall, and the only way
 	/// to refill it is to keep swinging. Disengaging to regenerate is what this talent is built to
@@ -30,12 +34,37 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Vengeance";
 
 		public override string Description =>
-			"Your maximum life is doubled, but you have 30% less defense. Leech 30% of the damage you "
-			+ "deal as life. For every 1% of your maximum life taken in the last 4 seconds, gain 1.5% "
+			"Your maximum life is doubled. Leech 30% of the damage you "
+			+ "deal as life. For every 1% of your maximum life taken in the last 10 seconds, gain 1.5% "
 			+ "increased damage AND 1.5% increased healing from all sources, up to +100%. "
 			+ "Fight hurt or fight for nothing.";
 
-		private const float WindowSeconds = 4f;
+		/// <summary>
+		/// How long a hit stays in the ramp. Raised 4s -> 10s on 2026-07-17 from play-test.
+		///
+		/// <b>The ramp is anti-synergistic by construction, and 4s made that fatal.</b> It BUILDS
+		/// while you are being hurt but only PAYS OUT while you are attacking — so it peaks at exactly
+		/// the moment you most need to leave, and then decays while you are away. Reported: "you
+		/// instinctively move out of the damage, then you need to run back into the fray and at which
+		/// point you miss 75% if not more of the leech."
+		///
+		/// That 75% is not an estimate; it falls out of the arithmetic. A sliding window drops a hit
+		/// after WindowSeconds, so a 3-second disengage costs (3/window) of the ramp: at 4s that is
+		/// exactly 75%, at 10s it is 30%. The model and the play-test agree on the mechanism, which is
+		/// why this is 10 and not a guess.
+		///
+		/// ⚠️ This is also a DAMAGE buff, not only a leech-uptime fix — the ramp multiplies GetDamage,
+		/// so a longer window means higher peak uptime on the offensive half too. It is deliberately
+		/// NOT paired with a cut to DamagePerLifeFraction: the "spikey" feel is the point of the
+		/// talent, and the fix is meant to let the spike survive one engage/disengage cycle rather
+		/// than to flatten it. If Vengeance now over-delivers on damage, this constant is what to
+		/// look at first.
+		///
+		/// Public for the same reason as MaxRampBonus: the HUD states this window to the player, and
+		/// when it was 4s here and a hardcoded "(4s)" there, raising it to 10s left the readout lying.
+		/// </summary>
+		public const float WindowSeconds = 10f;
+
 		private const float DamagePerLifeFraction = 1.5f;
 
 		/// <summary>Ceiling on the ramp, as a fraction. Public so the HUD can colour the maxed state
@@ -43,14 +72,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public const float MaxRampBonus = 1.0f;
 
 		private const float LifeMultiplier = 1.00f;
-		private const float DefensePenalty = 0.30f;
 		private const float LeechFraction = 0.30f;
 
 		/// <summary>
-		/// The whole loadout is one loop: shed defense so hits land hard, survive them on a doubled
-		/// pool, convert the resulting damage bonus back into life through leech. Each piece is a
-		/// liability without the others — the defense penalty is what turns the big pool from padding
-		/// into a resource you actually spend.
+		/// The whole loadout is one loop: take hits on a doubled pool, let them ramp you, and convert
+		/// the resulting damage bonus back into life through leech. Each piece is a liability without
+		/// the others — the pool is padding unless something is spending it, and the ramp is what
+		/// spends it.
 		///
 		/// "More" life, not "increased" — MaxLifeMore lands in StatModifier.Multiplicative, so the
 		/// doubling compounds with Fortitude/Royal Jelly/Avatar of Flesh instead of summing into the
@@ -73,7 +101,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>
 		{
 			{ "MaxLifeMore", LifeMultiplier },
-			{ "DefensePercent", -DefensePenalty },
+			// The "30% less defense" that used to sit here was removed on 2026-07-17. It read as a
+			// modest price and was in fact the most expensive line in the slot: defense is subtractive
+			// and vanilla floors damage to 1 before FinalDamage, so shedding it near that floor is
+			// violently non-linear. At WL20 it meant taking 238 per Plantera contact against Stagger's
+			// 62 — a 3.8x gap from a 3.6x stat difference — and at WL8 it was 168 against Stagger's 1,
+			// i.e. unbounded. Play-test: "with the 30% less defense you are also just taking so much
+			// damage", and it deleted the melee range the leech needs to function at all.
+			//
+			// Its replacement is not a smaller penalty — softening x0.70 to x0.85 only moves 3.8x to
+			// 3.6x, because the cliff eats it. All three pinnacles gave up their defense multipliers
+			// and mitigation moved to ClassBaselines.WarriorEndurance, which is multiplicative and so
+			// has no cliff to fall off. See .scripts/mitigation_model.py.
 			{ "LifeLeech", LeechFraction },
 		};
 
@@ -84,11 +123,14 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// fraction, so the HUD can state the actual number and the bonus can be derived from it.
 		///
 		/// This used to be a single float decayed by a flat 1/(WindowSeconds*60) per tick, which did
-		/// NOT mean "damage taken in the last 4 seconds" despite the description saying so: the
+		/// NOT mean "damage taken in the last WindowSeconds" despite the description saying so: the
 		/// decrement was absolute rather than proportional, so a hit for 50% of max life decayed away
-		/// in 2s and a hit for 10% in 0.4s. Only a hit for exactly 100% of max life lasted the stated
-		/// 4. Putting the number on screen made that discrepancy the player's problem, so the window
-		/// is now literal. Same shape as StaggerTalent's instance list.
+		/// in half the window and a hit for 10% in a tenth of it. Only a hit for exactly 100% of max
+		/// life lasted the stated duration. Putting the number on screen made that discrepancy the
+		/// player's problem, so the window is now literal. Same shape as StaggerTalent's instance list.
+		///
+		/// That the window is literal is what makes the 2026-07-17 4s -> 10s change mean what it says:
+		/// a 3-second disengage now costs 30% of the ramp instead of 75%.
 		/// </summary>
 		private readonly List<DamageEntry> recentHits = new List<DamageEntry>();
 

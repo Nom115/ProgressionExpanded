@@ -16,7 +16,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 			npc.life = npc.lifeMax;
 		}
 
-		public void OnHit(Terraria.NPC npc, Player player) { }
+		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }
 
 		public void Update(Terraria.NPC npc) { }
 

@@ -12,8 +12,9 @@ using ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours;
 namespace ProgressionExpanded.Src.UI
 {
 	/// <summary>
-	/// Live readout of the Vengeance ramp: how much damage you have taken in the last 4 seconds, and
-	/// the bonus it is currently buying you.
+	/// Live readout of the Vengeance ramp: how much damage you have taken inside the talent's window
+	/// (VengeanceTalent.WindowSeconds), and the bonus it is currently buying. Both the window and the
+	/// maxed threshold are read from the talent, never restated here — see WindowSeconds for why.
 	///
 	/// Vengeance is the only talent whose payoff moves several times a second and decays on its own,
 	/// so without a number on screen the player is guessing at when to commit. Stagger surfaces its
@@ -84,7 +85,7 @@ namespace ProgressionExpanded.Src.UI
 			// for the ramp (still taking damage) without getting any more out of it.
 			bool maxed = bonus >= VengeanceTalent.MaxRampBonus;
 
-			string damageText = $"{(int)damage} damage taken (4s)";
+			string damageText = $"{(int)damage} damage taken ({VengeanceTalent.WindowSeconds:0.#}s)";
 			string bonusText = $"Vengeance +{(int)(bonus * 100f)}% damage & healing";
 
 			Terraria.Utils.DrawBorderString(spriteBatch, bonusText, position, maxed ? MaxedColor : RampColor, scale);

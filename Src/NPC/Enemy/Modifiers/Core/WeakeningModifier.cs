@@ -11,7 +11,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 
 		public void Apply(Terraria.NPC npc) { }
 
-		public void OnHit(Terraria.NPC npc, Player player)
+		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }
+
+		public void OnHitPlayer(Terraria.NPC npc, Player player, Player.HurtInfo hurtInfo)
 		{
 			// Reduce defense by 5 for 8 seconds
 			player.AddBuff(Terraria.ID.BuffID.BrokenArmor, 480);

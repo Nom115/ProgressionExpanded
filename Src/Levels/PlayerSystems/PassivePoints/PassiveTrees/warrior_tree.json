@@ -206,7 +206,7 @@
     "detonate_notable": {
       "NodeId": "detonate_notable",
       "DisplayName": "Detonate",
-      "Description": "Notable: killing an enemy detonates it, dealing (20 + 15 x tier) damage to nearby foes in a growing radius.",
+      "Description": "Notable: killing an enemy has a (20 + 2 x tier)% chance to detonate it, dealing 10% of its maximum life to nearby foes in a growing radius.",
       "MaxTier": 5,
       "PointsPerTier": 1,
       "Prerequisites": [],

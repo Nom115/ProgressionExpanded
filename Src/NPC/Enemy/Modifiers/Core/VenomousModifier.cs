@@ -12,7 +12,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 
 		public void Apply(Terraria.NPC npc) { }
 
-		public void OnHit(Terraria.NPC npc, Player player)
+		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }
+
+		public void OnHitPlayer(Terraria.NPC npc, Player player, Player.HurtInfo hurtInfo)
 		{
 			// Apply Poisoned debuff to player for 5 seconds
 			player.AddBuff(BuffID.Poisoned, 300);

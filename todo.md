@@ -644,3 +644,190 @@ Five levers landed together → **65.3 HP/s**, 158 defense. **Still last of the 
       never reads `HealingPercent`. Vengeance's comment used to claim the channel covered it; the comment
       is now corrected, but decide whether that's a doc bug or a missing multiply.
 - [ ] Play-test literally any of this. **Zero of it has been Build+Reload'd.**
+
+---
+
+## 5b. ✅ IMPLEMENTED (2026-07-17): the pinnacle defense spread was the bug
+
+> **First real play-test of the pinnacle slot.** Reported: *"every tank apart from Stagger feels
+> incredibly squishy. Against white mobs they all do fine, which is perfect. Against bosses, Stagger
+> is the only one that actively has a chance against even King Slime."* Both halves were correct, and
+> the cause was structural. Model: **`.scripts/mitigation_model.py`** (+ `.scripts/juggernaut_stuck.py`
+> for the Juggernaut-specific "stuck in a boss" case).
+
+### The finding: a defense SPREAD in a subtractive system is a cliff, not a gradient
+
+The three pinnacles were spread across `DefensePercent` from **×0.7 (Vengeance) to ×2.5 (Stagger)**.
+Defense is **subtractive**, and vanilla floors damage to 1 **before** `FinalDamage`
+(`HurtModifiers.GetDamage:255`), so that spread did not produce a proportional outcome:
+
+| pinnacle | defense | WL8 | WL20 | WL50 | vs Stagger @WL20 |
+|---|---|---|---|---|---|
+| Stagger | 188 | **1** (immune) | 62 | 238 | reference |
+| Juggernaut | 157 | 31 | 101 | 277 | 1.6× |
+| Vengeance | 52 | **168** | 238 | 413 | **3.8×** |
+
+A 3.6× stat gap became a 3.8× damage gap at WL20 and an **unbounded** one at WL8, where Stagger's 188
+defense simply exceeded the raw hit. Against trash everyone clears the floor and everyone is fine —
+which is exactly why the complaint was **boss-only**. *The spread was the bug, not the numbers.*
+
+### What shipped
+
+| | was | now |
+|---|---|---|
+| Stagger `DefensePercent` | `1.50` (×2.5) | **removed** |
+| Juggernaut `DefensePercent` | `0.50` (×1.5) | **removed** (Strength's +1%/point **kept**) |
+| Vengeance `DefensePercent` | `-0.30` (×0.7) | **removed** |
+| — | — | **`ClassBaselines.WarriorEndurance = 0.50`**, gated on `PlayerClass.Melee` |
+| — | — | **`ClassBaselines.WarriorKnockbackTaken = 0.50`** — knocked back half as far |
+| Vengeance `WindowSeconds` | `4f` | **`10f`** |
+
+**Spread collapses 3.8× → 1.2×, at *every* endurance value** — the compression comes from the
+*removal*, not the number, so the two decisions are independent. Trash still takes 1 damage, so the
+"white mobs are fine" property survives untouched. The pinnacles are now separated by their
+**mechanics** (mana pool / hit cap / leech ramp) rather than by a stat, which is what §6 says the slot
+is for.
+
+- **Why 0.50 and not lower:** each pinnacle needs a different endurance merely to break even —
+  Stagger **~70%**, Juggernaut **~40%**, Vengeance better at any value (it lost a *penalty*).
+  ⚠️ **Below ~40% Juggernaut comes out WORSE than before**, which is half of what this fixes.
+  At 0.50: Juggernaut **+19%**, Vengeance **+2.3×**, Stagger **−1.7×**.
+- **Why not 0.70** (which would nerf nobody): it consumes the whole of Fargo's 0.75 endurance clamp,
+  making every Endurance gear roll and the `Endurance` stat key **dead** on this modpack. 0.50 leaves
+  25 points of headroom.
+- **Vengeance's 4s→10s is arithmetic, not taste.** A sliding window drops a hit after `WindowSeconds`,
+  so a 3-second disengage costs `3/window` of the ramp: **exactly 75% at 4s**, 30% at 10s. The report
+  said "you miss 75% if not more" — **the model and the play-test independently agree on the
+  mechanism.** The ramp is anti-synergistic by construction: it *builds* while you are hurt but only
+  *pays out* while you attack, so it peaks exactly when you most need to leave.
+
+### Still open
+
+- [ ] **Play-test all of it. Zero Build+Reload.** `WarriorEndurance` (0.50) and
+      `WarriorKnockbackTaken` (0.50) are first guesses.
+- [ ] **Knockback reduction is unmodelled.** Unlike everything else in §5b it has no numbers behind it
+      — knockback distance is not something `.scripts/mitigation_model.py` simulates. It should quietly
+      help the "stuck in a boss" case (less juggling = more control, which matters most to a Juggernaut
+      already paying −50% movement), but that is reasoning, not measurement. **Watch whether it makes
+      Juggernaut's mobility cost feel cheaper than intended.**
+- [ ] ⚠️ **This knowingly nerfs Stagger, the yardstick, by 1.7×.** It should still lead — its mana pool
+      eats 55% of every hit before life is touched, leaving it at ~47 effective vs the others' 85–104 —
+      but that lead is now *earned by a mechanic that drains* rather than handed over by a stat.
+      **If Stagger is now too weak, move `ManaPerMaxLifeFraction`. Do NOT put the defense back** — it
+      brings the cliff with it.
+- [ ] ⚠️ **Vengeance's 10s window is a DAMAGE buff too**, not only a leech-uptime fix — the ramp
+      multiplies `GetDamage`, so peak uptime rises on the offensive half as well. Deliberately not
+      paired with a `DamagePerLifeFraction` cut (the "spikey" feel is the point). If Vengeance now
+      over-delivers on damage, `WindowSeconds` is the first thing to look at.
+- [ ] ⚠️ **Two big changes in one pass again** (§1a/§5a's recurring lesson). The endurance and the
+      window are separable and touch different talents, so this is more readable than the five-lever
+      Juggernaut pass — but Vengeance got *both*, so if Vengeance is wrong, move the window first.
+- [ ] **`PlayerClass` is now mechanically load-bearing for the first time** (`CLAUDE.md` §8 said it
+      "has no other mechanical effect yet" — that is now false). Only `warrior_tree.json` exists and
+      every class opens it, so a non-Melee selection currently grants **no endurance at all** while
+      still opening the warrior tree. Harmless today; a trap when Ranged/Magic/Summoner land.
+- [ ] **Ironhide (`warrior_tree.json`, `DefensePercent 0.10`/rank) was NOT removed.** It is a player
+      investment that applies equally to all three pinnacles, so it does not create a spread — but it
+      is 50 of the 75 baseline defense the model assumes, and it still feeds the cliff. Decide whether
+      "removing any touch to defensives" was meant to include it.
+- [ ] **Bone Armor converts defense→damage** and was balanced against Stagger's ×2.5. With the ×2.5
+      gone its offence is quietly nerfed too. Unmeasured.
+- [ ] ⚠️ **Fargo's `ApplyDR()` clamp interaction is unverified.** It clamps `Player.endurance` to 0.75.
+      We contribute from `PostUpdateMiscEffects`; if Fargo clamps in an *earlier* hook, our 0.50 lands
+      on top of an already-clamped value and could reach the `> 1f` guard — which would be
+      near-invulnerability. **Verify which hook Fargo clamps in before trusting this.**
+
+---
+
+## 6. The elemental system
+
+> **This section exists because there wasn't one.** Every other system in the mod has its open
+> constants tracked here; the elemental system had *nothing*, despite `CLAUDE.md` §10 shipping in
+> commit `9f2f6cf` with four untested first guesses and no mitigation of any kind. Opened
+> **2026-07-16** alongside Phase 2. Model: **`.scripts/elemental_resistance.py`**.
+
+### 6a. ✅ IMPLEMENTED (2026-07-16): Phase 2 — resistance
+
+Shipped, **not play-tested**. Resistance is now a **rolled property**, not a species trait: a
+per-enemy per-element triangular roll (mean +0.15, half-width 0.25), four stateless ward affixes
+(+0.40 to one element, weight 50), and Bleed's armour curve `def/(|def|+50)`. Five masteries at rank 4
+go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
+
+**Two of §10's five planned sources were cut, both deliberately:**
+
+- ⚠️ **`buffImmune` is a trap and §10's rationale for it was factually wrong.** Verified twice against
+  the assembly. It encodes "should this icon appear / would this break the AI", not elemental affinity;
+  it is wildly asymmetric (Fire 45 / Cold 25 / Venom 2 / **Electrified 0**); poison curation lives on
+  `Poisoned`(20)=171 not `Venom`(70)=2 and `GrantImmunityWith[20]={70}` is one-way; and "modded NPCs
+  work for free" means **free zero** — an all-null row gives resistance 0, so most of the actual
+  Calamity/Fargo modpack would be undifferentiated. Worst: `ImmuneToRegularBuffs` covers **The
+  Destroyer, the Lunatic Cultist and all four Celestial Pillars**, so reading it would switch a
+  ~60-point elemental investment **off for the whole mech→Lunar stretch and back on for Moon Lord**.
+  A hardcoded id table has the same free-zero problem — the roll is the answer *because* it works for
+  everything.
+- **Rarity gives no resistance** — it already grants ×3 HP and ×2 defense, and the defense bump already
+  raises Bleed resistance. Under DoT, TTK ∝ `3/(1-r)`; under direct damage, TTK ∝ `3` — so rarity
+  resistance makes the investment fall behind *precisely* on the enemies it should shine against.
+  It returns legibly via `MaxModifiers` (a Mythic rolls 5 affixes → likelier warded, visible in its name).
+
+**Bugs found and fixed in §10's own spec:**
+
+- **`min(0.9, def/(def+50))` had a pole AND a sign flip.** Undefined at `def=-50`; *positive* below it
+  (`def=-60` → `+6.0` → clamps to **+0.90**, the squishiest enemy in the game resisting Bleed 90%).
+  Negative NPC defense is real — EoC's `aiStyle 4` sets `-15`/`-30` in Expert phase 2. Now
+  `def/(|def|+50)`: identical for `def ≥ 0`, monotone over all reals, pole-free.
+- **Bleed pays for armour twice** — `damageDone` is already post-defense (`DefenseEffectiveness = 0.5`
+  for NPCs). The first charge is universal; Bleed's resistance is an extra proportional one. Kept: that
+  *is* "physical, limited by armour instead".
+
+### Still open
+
+- [ ] **Play-test all of it. Zero Build+Reload.** `RollMean` (0.15), `RollHalfWidth` (0.25),
+      `WardResistance` (0.40) are first guesses, as are the **pre-existing** `ConversionPerTier`
+      (2%/rank), `BaseDurationSeconds` (4s), `MaxInstancesPerElement` (20) and Plaguebearer's
+      3%/element — **none of which have ever been tracked or tested either.**
+- [ ] ⚠️ **The roll is INVISIBLE until Phase 4.** Wards announce themselves in the enemy's name; a +0.40
+      fire roll does not, so it reads as Immolation randomly underperforming with no counterplay.
+      `RollHalfWidth` is deliberately moderate for this reason. **Most likely source of "this feels bad".
+      Consider pulling Phase 4 (the hover panel) forward before widening the roll.**
+- [ ] ⚠️ **Wards are invisible on ~43% of bosses — found in review, not fixed.**
+      `EnemyModifierSystem.GenerateDisplayName:115` renders at most the **first two** modifier prefixes:
+      `prefix = modifiers[0]; if (count > 1) prefix = $"{modifiers[0]} {modifiers[1]}"`. Trash is fine
+      (Uncommon rolls exactly 1, Rare 1–2 → a ward always shows). But a **previously-defeated boss always
+      rolls 2–5** (`:59`), averaging 3.5, so a ward landing in slot 3+ is applied and never named — fire
+      DoT quietly cut 40% with nothing on screen. **This is precisely where wards matter most**: ~50% of
+      repeat bosses carry one, vs 1.67% of trash.
+      - **This partly undercuts the argument for shipping Phase 2 before Phase 4.** "The prefix names the
+        element" was the reason wards are legible without the hover panel; it holds for trash and fails
+        for bosses.
+      - Two fixes, neither obviously right: **name every modifier** (general, but yields "Mythic Tough
+        Swift Regenerating Flamewarded Brutal Plantera"), or **float wards to the front of the prefix**
+        (short, but a special case in shared naming code — the kind of bandaid `CLAUDE.md` argues against).
+        A third option is to let Phase 4 carry it and accept boss wards are opaque until then.
+- [ ] **`RollMean` is a live fork, not a settled number.** Mean-zero was the considered alternative: it
+      changes the tuning identity by nothing (a flat 32%/element becomes a distribution *centred* on
+      32%) and leaves total output to `ConversionPerTier`, which is arguably the honest dial for output.
+      Positive was chosen so Phase 2 does the mitigating. **If elemental output is over-nerfed, move
+      `RollMean` toward 0 and cut `ConversionPerTier` — do not fight the two against each other.**
+- [ ] **`BleedArmourHalfPoint = 50` vs 150 — logged dissent.** The case for 150: at 50, Bleed is only
+      62% of an average element for equal points, i.e. Rend is a trap. **But that assumes a mean-zero
+      roll and a p75-defense enemy.** At the shipped mean and a median enemy (def 15) it is **~90%**,
+      bought with zero variance and total ward immunity. **First lever to move if Rend under-performs.**
+- [ ] **Median-defense elites reach ~50% Bleed resistance.** Mod defense inflation is ≤×3.36 (rarity
+      ≤×2.0 × Tough ×1.5 × level ×1.12). It does **not** track world level, so it doesn't drift — but
+      ×3.36 on a median def 15 is 50, which is the half-point. Watch it.
+- [ ] **The clamps are dormant and therefore untested.** Elemental max is `0.40 + 0.40 = 0.80`;
+      `MinResistance` floors at −0.10. Neither binds until Phase 3's penetration. For Bleed,
+      `MaxResistance` binds only at `def ≥ 450` — Dungeon Guardian alone. **Don't mistake the clamp for
+      a balancing lever.**
+- [ ] ⚠️ **Phase 3: `ArmorPenetration` must NEVER feed `penetration`.** It already flows into
+      `damageDone` via `HitModifiers.ArmorPenetration`, so wiring it in is the **Vengeance ×4 double-dip**
+      (§1a) exactly. Penetration must be a *new, separate* elemental-penetration stat. Also undecided:
+      **should penetration apply to Bleed at all?** The current shape subtracts it uniformly.
+- [ ] **Mod-dealt AoE still does not convert** (pre-existing, `CLAUDE.md` §10): `ModPlayer.OnHitNPC` is
+      dispatched only from `Player.StrikeNPCDirect`, so Detonate/Hellfire/Corrupted Blood never apply DoT.
+- [ ] **New §7 bug found while doing this (not fixed):** the mod's rarity/Tough/level defense multipliers
+      are written to `npc.defense` but never `npc.defDefense`, and several aiStyles reset
+      `defense = defDefense` **every frame** (`aiStyle 11` Skeletron `NPC.cs:22154`, EoC, Golem, Prime).
+      So on those enemies `ToughModifier` and the rarity defense bump **do nothing at all**. Wider than
+      the elemental system — it silently eats a whole affix on every boss with those aiStyles.

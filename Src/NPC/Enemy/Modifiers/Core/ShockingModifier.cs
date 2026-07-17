@@ -12,7 +12,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 
 		public void Apply(Terraria.NPC npc) { }
 
-		public void OnHit(Terraria.NPC npc, Player player)
+		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }
+
+		public void OnHitPlayer(Terraria.NPC npc, Player player, Player.HurtInfo hurtInfo)
 		{
 			// Apply Electrified debuff for 5 seconds (prevents movement items)
 			player.AddBuff(BuffID.Electrified, 300);

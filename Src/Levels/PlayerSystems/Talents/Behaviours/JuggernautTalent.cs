@@ -10,8 +10,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	///
 	/// Its life is deliberately "increased" rather than "more" — it lands in StatModifier.Additive
 	/// and merely sums with Fortitude/Royal Jelly/Avatar of Flesh, where Vengeance's doubling
-	/// compounds against them. Juggernaut used to be the default pick on raw life alone; the
-	/// defense is what it trades for, and it pays in mobility.
+	/// compounds against them. Juggernaut used to be the default pick on raw life alone; the hit cap
+	/// and its Strength-driven defense are what it trades for, and it pays in mobility.
+	///
+	/// It used to carry a flat 50% more defense as well. That went on 2026-07-17 when all three
+	/// pinnacles surrendered their defense multipliers to ClassBaselines — see percentBonuses. The
+	/// Strength line survives and is now the only defense that separates this talent from the others.
 	///
 	/// It also kills two of your three attributes outright — Dexterity and Intellect grant nothing at
 	/// all, neither their attack-speed/mana line nor their damage line. Since the mastery gate keys
@@ -61,7 +65,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Juggernaut";
 
 		public override string Description =>
-			"+50% maximum life. 50% more defense. 65% more damage. No single hit can take more than half "
+			"+50% maximum life. 65% more damage. No single hit can take more than half "
 			+ "of your maximum life. Each point of Strength also grants +1 life regeneration per second "
 			+ "and +1% defense. Healing potions recharge four times faster, heal 50% more, and double "
 			+ "your life regeneration for 4 seconds. -15% attack speed, and attack speed cannot be "
@@ -69,7 +73,6 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			+ "grant you nothing.";
 
 		private const float LifeBonus = 0.50f;
-		private const float DefenseBonus = 0.50f;
 
 		/// <summary>
 		/// Strength's Juggernaut-only lines, in HP/s and defense-% per point.
@@ -138,10 +141,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private static readonly Dictionary<string, float> percentBonuses = new Dictionary<string, float>
 		{
 			{ "MaxLifePercent", LifeBonus },
-			// DefensePercent multiplies a Player.DefenseStat, which collects adds and multiplies
-			// separately — so this is already "more" defense and compounds with Bone Armor and
-			// Avatar of Flesh rather than summing with them.
-			{ "DefensePercent", DefenseBonus },
+			// The flat "50% more defense" that used to sit here was removed on 2026-07-17, along with
+			// Stagger's x2.5 and Vengeance's x0.7 penalty — see ClassBaselines. Defense is subtractive
+			// and vanilla floors damage to 1 before FinalDamage, so a pinnacle-wide defense SPREAD is
+			// a cliff, not a gradient, and it was why this talent felt fine against trash and hopeless
+			// against bosses. Mitigation now comes from ClassBaselines.WarriorEndurance, which every
+			// warrior has and which is multiplicative.
+			//
+			// The Strength-driven defense in ApplyStrengthSustain BELOW SURVIVES, and it is now the
+			// only thing separating this talent from the other two on defense — which is the right
+			// shape: it is bought with an attribute investment the talent already forces, rather than
+			// handed over as a flat multiplier.
 			{ "GenericDamage", DamageBonus },
 			{ "MovementSpeed", -MoveSpeedPenalty },
 		};
@@ -162,8 +172,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// (Player.cs:731/790):
 		/// - It clamps LAST, after SourceDamage, IncomingDamageMultiplier, defense, armour penetration
 		///   and FinalDamage have all resolved. So this is a bound on the damage actually dealt, and
-		///   the 50% more defense still does its work underneath — the cap only binds on the hits big
-		///   enough to punch through it.
+		///   the defense underneath still does its work — the cap only binds on the hits big enough to
+		///   punch through it. (Measured: at WL20 the cap is DORMANT against every boss except Duke
+		///   Fishron; defense is what is actually binding until ~WL50. See .scripts/juggernaut_stuck.py.
+		///   The two are mutually exclusive per hit — a hit big enough to be capped had its defense
+		///   subtraction rendered irrelevant, and a hit small enough for defense to blunt never reaches
+		///   the cap.)
 		/// - Multiple callers take the LOWEST limit (Math.Min), so this composes with any other mod's
 		///   cap and does not depend on hook order.
 		/// - It floors at 1, so there is no way to reach a zero-damage invulnerability, however small

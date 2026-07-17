@@ -14,7 +14,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Crimson
 
 		public void Apply(Terraria.NPC npc) { }
 
-		public void OnHit(Terraria.NPC npc, Player player)
+		public void OnHitByPlayer(Terraria.NPC npc, Player player)
 		{
 			// Calculate life steal amount (10% of damage dealt)
 			int lifeSteal = npc.damage / 10;
