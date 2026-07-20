@@ -78,7 +78,17 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	}
 
 	/// <summary>
-	/// Everything close enough to see you is already dying.
+	/// Fix your gaze on a single foe. Hitting the SAME enemy builds Dread on it — each stack makes it
+	/// take more damage from you and shreds its defense; switching targets resets the ramp, and it
+	/// decays if you stop attacking. A single-target hunter's identity: it rewards committing to one
+	/// enemy and scales with attack speed (fast weapons stack faster), distinct from Unblinking Eye's
+	/// crit build and Second Phase's low-life window.
+	///
+	/// The old Dread Gaze was a flat +25% damage in disguise: "within 30 tiles" is nearly the whole
+	/// screen, so a melee was always in range. This rework replaces it with a mechanic that changes
+	/// how you fight rather than just a number.
+	///
+	/// Per-instance state on the shared behaviour, single-player focused (same pattern as StaggerTalent).
 	/// </summary>
 	public class DreadGazeTalent : TalentBehaviour
 	{
@@ -87,23 +97,50 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Dread Gaze";
 
 		public override string Description =>
-			"Enemies within 30 tiles take 25% more damage from you and have 15 less defense. "
-			+ "Rewards fighting at knife-range.";
+			"Hitting the same enemy builds Dread on it: each stack makes it take 8% more damage from "
+			+ "you and shreds 3 defense, up to 6 stacks. Switching targets resets your Dread, and it "
+			+ "fades if you stop attacking. Rewards hunting one foe.";
 
-		private const float RangeInTiles = 30f;
-		private const float DamageBonus = 0.25f;
-		private const int DefenseReduction = 15;
+		private const int MaxStacks = 6;
+		private const float DamagePerStack = 0.08f; // +48% at full stacks
+		private const int DefensePerStack = 3;      // -18 at full stacks
+		private const int DecayTicks = 180;         // 3s of not attacking the target clears it
+
+		private int dreadTargetWho = -1;
+		private int dreadStacks;
+		private int decayTimer;
 
 		public override void ModifyHitNPC(Player player, NPC target, ref NPC.HitModifiers modifiers)
 		{
-			float range = RangeInTiles * 16f;
-			if (player.Distance(target.Center) > range)
-				return;
+			// Same target keeps ramping (capped); a different target restarts the ramp at one stack.
+			if (target.whoAmI == dreadTargetWho)
+			{
+				if (dreadStacks < MaxStacks)
+					dreadStacks++;
+			}
+			else
+			{
+				dreadTargetWho = target.whoAmI;
+				dreadStacks = 1;
+			}
 
-			modifiers.FinalDamage *= 1f + DamageBonus;
+			decayTimer = DecayTicks;
 
-			// Base is the enemy's defense value itself; subtracting from it is a flat shred.
-			modifiers.Defense.Base -= DefenseReduction;
+			// The hit that adds the stack also benefits from it. FinalDamage (multiplicative,
+			// post-defense) so it composes with Stagger/Second Phase and has no floor-at-1 cliff;
+			// Defense.Base -= is the flat shred the old version used.
+			modifiers.FinalDamage *= 1f + dreadStacks * DamagePerStack;
+			modifiers.Defense.Base -= dreadStacks * DefensePerStack;
+		}
+
+		public override void ResetEffects(Player player)
+		{
+			// Dispatched every frame to the active talent; drop the ramp if the target goes untouched.
+			if (decayTimer > 0 && --decayTimer == 0)
+			{
+				dreadStacks = 0;
+				dreadTargetWho = -1;
+			}
 		}
 	}
 }

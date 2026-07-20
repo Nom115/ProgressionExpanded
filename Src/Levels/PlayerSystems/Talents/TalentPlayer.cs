@@ -236,10 +236,26 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 			}
 		}
 
+		/// <summary>
+		/// A talent's declarative LifeRegenPercent lands here, not with its other PercentBonuses in
+		/// PostUpdateMiscEffects — it is the one key whose only correct home is this hook. See
+		/// StatApplier.ApplyLifeRegenPercent. Nothing declares it today; wired up so that a talent which
+		/// does gets the working version rather than silently re-acquiring the bug that key just had.
+		/// </summary>
 		public override void UpdateLifeRegen()
 		{
 			for (int i = 0; i < active.Count; i++)
-				active[i].UpdateLifeRegen(Player);
+			{
+				TalentBehaviour behaviour = active[i];
+
+				if (behaviour.PercentBonuses != null
+					&& behaviour.PercentBonuses.TryGetValue("LifeRegenPercent", out float regenPercent))
+				{
+					StatApplier.ApplyLifeRegenPercent(Player, regenPercent);
+				}
+
+				behaviour.UpdateLifeRegen(Player);
+			}
 		}
 
 		public override void NaturalLifeRegen(ref float regen)

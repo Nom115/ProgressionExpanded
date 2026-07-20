@@ -11,8 +11,10 @@ namespace ProgressionExpanded.Items.Modifiers
 {
 	/// <summary>
 	/// Rolls item rarity and modifiers. Mirrors the enemy-side <c>EnemyRarityConfig.RollRarity</c> +
-	/// <c>ModifierPool.RollModifiers</c> (weighted, no-dupe), but adds world-level tier gating so
-	/// low-progression items can only roll low tiers. Item level = current world level.
+	/// <c>ModifierPool.RollModifiers</c> (weighted, no-dupe), but adds item-level tier gating so
+	/// low-level items can only roll low tiers. The <c>itemLevel</c> passed in is the item's LOCKED
+	/// creation-time level: for a drop that is the world level at drop time (== creation); orbs pass
+	/// the item's stored level. It is not the "current" world level after the item exists.
 	/// </summary>
 	public static class ItemModifierRoller
 	{

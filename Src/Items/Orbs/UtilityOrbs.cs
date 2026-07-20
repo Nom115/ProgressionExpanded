@@ -25,7 +25,11 @@ namespace ProgressionExpanded.Items.Orbs
 		public override OrbResult Apply(Item target) => OrbActions.Annul(target);
 	}
 
-	/// <summary>Orb of Augmentation — add one modifier to an item below its rarity's mod cap.</summary>
+	/// <summary>
+	/// Adds one modifier to an item below its rarity's mod cap.
+	/// Displays as "Exalted Orb" (see the localization file). The class keeps its old name so existing
+	/// save inventories don't lose their orbs on the rename; display name ≠ class name here.
+	/// </summary>
 	public class OrbOfAugmentation : OrbItem
 	{
 		public override string Texture => "ProgressionExpanded/Assets/Items/Materials/VerdantParadox";

@@ -88,6 +88,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints
 			ApplyBonusesToStats();
 		}
 
+		/// <summary>
+		/// Second Wind's LifeRegenPercent, applied here rather than with the rest of the tree's percent
+		/// bonuses in PostUpdateMiscEffects. See StatApplier.ApplyLifeRegenPercent for the full reasoning
+		/// — briefly: that hook runs before campfire/heart lantern/gear regen exists, AND before
+		/// TalentPlayer contributes at all (tML orders ModPlayers by type.FullName, so PassivePoints
+		/// sorts ahead of Talents), so from there this could scale almost nothing.
+		/// </summary>
+		public override void UpdateLifeRegen()
+		{
+			StatApplier.ApplyLifeRegenPercent(Player, GetPercentBonus("LifeRegenPercent"));
+		}
+
 		#region Allocation Management
 
 		/// <summary>

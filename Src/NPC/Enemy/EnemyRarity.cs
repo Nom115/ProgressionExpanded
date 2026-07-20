@@ -42,7 +42,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 					StatMultiplier = 1.3f,
 					DropChanceMultiplier = 1.2f,
 					DropQuantityMultiplier = 1.2f,
-					XPMultiplier = 1.3f,
+					XPMultiplier = 1.5f,
 					SpawnChance = 0.20f, // 20% spawn rate
 					MaxModifiers = 1
 				},
@@ -53,7 +53,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 					StatMultiplier = 1.6f,
 					DropChanceMultiplier = 1.5f,
 					DropQuantityMultiplier = 1.5f,
-					XPMultiplier = 1.6f,
+					XPMultiplier = 2.0f,
 					SpawnChance = 0.07f, // 7% spawn rate
 					MaxModifiers = 2
 				},
@@ -64,7 +64,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 					StatMultiplier = 2.0f,
 					DropChanceMultiplier = 2.0f,
 					DropQuantityMultiplier = 2.0f,
-					XPMultiplier = 2.0f,
+					XPMultiplier = 3.0f,
 					SpawnChance = 0.02f, // 2% spawn rate
 					MaxModifiers = 3
 				},
@@ -75,7 +75,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 					StatMultiplier = 2.5f,
 					DropChanceMultiplier = 2.5f,
 					DropQuantityMultiplier = 2.5f,
-					XPMultiplier = 2.5f,
+					XPMultiplier = 5.0f,
 					SpawnChance = 0.008f, // 0.8% spawn rate
 					MaxModifiers = 4
 				},
@@ -86,7 +86,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 					StatMultiplier = 3.0f,
 					DropChanceMultiplier = 3.0f,
 					DropQuantityMultiplier = 3.0f,
-					XPMultiplier = 3.0f,
+					XPMultiplier = 8.0f,
 					SpawnChance = 0.002f, // 0.2% spawn rate
 					MaxModifiers = 5
 				},

@@ -33,10 +33,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// the pool is empty against 100% when it is full, and the post-hit delay is itself longer the emptier
 	/// you are. Letting the pool bottom out is punishing, and it is supposed to be.
 	///
-	/// <b>Two answers, not three.</b> Stand still and vanilla's own doubling refills the pool, or crit
-	/// and burn a quarter of the bleed off outright. The talent asks whether you can afford to stop,
-	/// whether you can land a crit, and whether you budgeted your mana — and it is a wall only for as
-	/// long as those answers hold.
+	/// <b>The stance is one axis with two opposed answers, and neither is the safe one.</b> Mana only
+	/// recovers while you are planted; life only gets its 2%/second while you are moving. Planting
+	/// refills the buffer that eats the next hit; moving repairs the bar the last one already took. You
+	/// cannot do both at once, and the talent is asking, continuously, which of the two you are short of
+	/// — a full pool and a half-empty bar wants you running, a full bar and no mana wants you rooted.
+	/// The pool caps at half your maximum life, so planting has a natural end: top it off, then leave.
+	///
+	/// This is why the standing-still x2 life-regen bonus was removed on 2026-07-17. It gave planting
+	/// mana AND more life, so planting was simply better at everything and the "axis" had one real answer
+	/// with a cost bolted on. Both halves now pay, so neither is free.
+	///
+	/// <b>Two answers to the bleed itself, then.</b> Plant and pay it out of mana, or crit and burn a
+	/// quarter of it off outright. The talent asks whether you can afford to stop, whether you can land a
+	/// crit, and whether you budgeted your mana — and it is a wall only for as long as those answers hold.
 	///
 	/// There used to be a third: out-last the bleed behind 150% more defense. That was removed on
 	/// 2026-07-17 (see percentBonuses), and its removal is the point — the defense was doing so much
@@ -63,9 +73,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			+ "is increased by 50% of your maximum life. 55% of the damage you take is dealt to you over "
 			+ "5.5 seconds instead of all at once, and that damage is drained from your mana before it "
 			+ "touches your life — but only while you have mana left to arm it. Critical hits burn away "
-			+ "25% of the remaining damage, once per second. Your mana does not recover while you move: "
-			+ "stand still and it floods back, and your life regeneration doubles. Hold your ground and "
-			+ "pay in mana.";
+			+ "25% of the remaining damage, once per second. Your mana only recovers while you stand "
+			+ "still; while you move, you regenerate an extra 2% of your maximum life per second instead. "
+			+ "Plant to refill the pool, move to repair the bar.";
 
 		private const float DamagePercent = 0.55f;
 		private const float Duration = 5.5f;
@@ -97,15 +107,30 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float FlatRegenPerSecond = 8f;
 
 		/// <summary>
-		/// Untested first guess, and the only dial the stance has left. See the class docs.
+		/// Life regenerated per second while MOVING, as a fraction of maximum life. Untested first guess,
+		/// and the other half of the stance — see the class docs for the yin-yang it completes.
 		///
-		/// There is deliberately no commitment threshold in front of it. That existed to stop a
-		/// frame-perfect trick against the old planted damage bonus — run for the healing, stop for the
-		/// single frame your hit lands, bank both. With no damage lever there is nothing to game: regen
-		/// accrues per tick, so a player who stops for half a second gets exactly half a second of
-		/// doubled regeneration and no more.
+		/// <b>Proportional, and that is the whole reason it is expressed this way.</b> The talent's own
+		/// docs above explain why flat regeneration cannot work here: +8/s is +8/s at level 1 and at level
+		/// 100, against enemy damage that scales without a cap, so it falls off no matter what number it
+		/// is given. This is the same fix mana already got — 2% of maximum life scales with every point of
+		/// Strength, every % life bonus and every life crystal, forever, so it never needs re-tuning
+		/// against world level. It is the ONLY sustain on this talent that does not decay.
+		///
+		/// <b>This replaced a x2 flat-regen bonus for standing still</b> (removed 2026-07-17). That bonus
+		/// gave planting mana AND more life, which meant moving was pure downside and the stance had only
+		/// one real answer. The axis now has two opposed ones — see the class docs.
+		///
+		/// <b>There is deliberately no commitment threshold in front of it</b>, and it survives the same
+		/// argument its predecessor did. A threshold existed once to stop a frame-perfect trick against
+		/// the old planted DAMAGE bonus — run for the healing, stop for the single frame your hit lands,
+		/// bank both. There is no damage lever any more, and both halves of this axis accrue per tick, so
+		/// a player who alternates gets exactly the fraction of each that they paid for: wiggling for half
+		/// a second buys half a second of mana and half a second of life, never both. Averaging the two is
+		/// a legitimate line to play, not an exploit — it is strictly worse than committing when you know
+		/// which resource you actually need.
 		/// </summary>
-		private const float StandingStillRegenMultiplier = 2f;
+		private const float MovingLifeRegenFraction = 0.02f;
 
 		/// <summary>
 		/// Empty, and deliberately so — see below.
@@ -227,33 +252,76 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// Stand still and your regeneration doubles. Applies to the flat component only — gear, buffs,
-		/// and this talent's own +8/s, taking it to 16. It is unconditional: there is no bleed gate,
-		/// because there is no longer a cost to gate. A bonus with no downside does not need a window
-		/// in which the downside is fair.
+		/// Move and your life comes back. The opposite half of SuppressPassiveManaRegen, and the two are
+		/// meant to be read together — see the class docs.
+		///
+		/// <b>PostUpdateMiscEffects, NOT the UpdateLifeRegen hook, and the choice is what makes this a
+		/// plain additive contribution rather than a private healing channel.</b> This hook runs
+		/// immediately before Player.UpdateLifeRegen (Player.cs:24940/24941), so the value lands in
+		/// lifeRegen while it is still just a pile of flat adds — exactly where this talent's own +8/s
+		/// arrives via StatApplier, and where campfire, heart lantern and gear regen join it moments
+		/// later. Two things follow, both of them the point:
+		/// - <b>External % increases scale it.</b> Anything contributing from the UpdateLifeRegen hook —
+		///   Second Wind's LifeRegenPercent, since it was moved there on 2026-07-17 — multiplies a
+		///   lifeRegen that already contains this. Contributing from UpdateLifeRegen ourselves would be a
+		///   race against those scalers decided by tML's ModPlayer order, which is exactly the bug
+		///   StatApplier.ApplyLifeRegenPercent documents.
+		/// - <b>Vanilla DoTs switch it off — because of WHERE it lands, not because of what it is.</b>
+		///   UpdateLifeRegen opens with one block per debuff (:17749-17852: Poisoned, Venom, On Fire x3,
+		///   Frostburn x2, Burning, Suffocation, Electrified, Tongued), each of which does
+		///   `if (lifeRegen > 0) lifeRegen = 0;`, then `lifeRegenTime = 0f;`, then subtracts its own
+		///   degen. That wipes everything contributed BEFORE it — which is every regen source this mod
+		///   has, since they all land in PostUpdateMiscEffects. Same treatment as the flat +8/s and
+		///   Juggernaut's Strength regen; consistent, and it keeps DoTs as the answer key they are for.
+		///
+		/// <b>⚠️ The zeroing is POSITIONAL, not global — "a DoT means no regen" is the wrong reading.</b>
+		/// Vanilla's own Hearty Meal (:17928), campfire (:17930) and heart lantern (:17934) are added
+		/// AFTER those blocks and are NOT wiped; they offset the degen instead. Under Poisoned (-4 half-HP/s)
+		/// a campfire and a lantern bring you to -1, and honey (:17854, +4 but clamped at 0) then takes you
+		/// to +3 — genuinely positive while poisoned. So a debuffed player is usually NOT at zero regen. It
+		/// is specifically OUR regen that is off, because of where we contribute. Anything in the
+		/// UpdateLifeRegen hook (:17938) is likewise past the blocks and untouched.
+		///
+		/// <b>No lifeRegen > 0 guard here, and its absence is correct twice over.</b>
+		/// - This is an ADD, not a multiply. The guard exists on multiplies because scaling a negative
+		///   lifeRegen amplifies a DoT; adding to one merely offsets it, which is what regeneration IS.
+		///   Vanilla's own late adds above are unguarded for exactly this reason.
+		/// - It would be near-dead code anyway: ResetEffects zeroes lifeRegen (:17158) at Update:24501,
+		///   and the debuff blocks do not run until UpdateLifeRegen at Update:24941 — one line after this
+		///   hook. So lifeRegen cannot yet be negative when we run, short of another mod contributing
+		///   negative regen from PostUpdateMiscEffects.
+		///
+		/// <b>Unconditional, NOT bleed-gated</b> — hence its position above the instances.Count early
+		/// return in PostUpdateMiscEffects, the same reason SuppressPassiveManaRegen sits there. Gated,
+		/// the axis would vanish the moment the last bleed expired, which is precisely when a player is
+		/// deciding whether to plant or to run.
+		///
+		/// statLifeMax2 rather than statLifeMax: both already hold this talent's +150 and every Strength
+		/// point (ResetEffects runs ModifyMaxStats first — see ModifyMaxStats above), but statLifeMax2
+		/// adds vanilla's own life bonuses on top, making it the bar actually on screen. "2% of your
+		/// maximum life" has to mean 2% of the number the player can read.
 		///
 		/// IsStandingStillForSpecialEffects is vanilla's own definition of stationary (|velocity| under
-		/// 0.05 on both axes) — the one Shiny Stone uses. Read straight off the player here rather than
-		/// cached a hook earlier, because this is the very point in the frame at which vanilla reads it
-		/// for Shiny Stone (Player.cs:24940), so we see the velocity vanilla sees. Deliberately NOT
-		/// gated on itemAnimation == 0 the way Shiny Stone is: planting your feet to swing should still
-		/// heal you.
+		/// 0.05 on both axes) — the one Shiny Stone uses. Deliberately NOT gated on itemAnimation == 0
+		/// the way Shiny Stone is: this fires while MOVING, and a player who is swinging mid-run has not
+		/// stopped moving.
 		///
-		/// <b>There is deliberately no NaturalLifeRegen counterpart.</b> The flat component is the right
-		/// lever because vanilla already handles the ramp itself: it scales the natural ramp x1.25 while
-		/// stationary against x0.5 while moving (Player.cs:18003), so standing still is rewarded there
-		/// without us touching it. Flat regen has no such vanilla treatment, which is exactly why it is
-		/// the part worth doubling.
+		/// <b>There is deliberately no NaturalLifeRegen counterpart</b>, and moving it there would in fact
+		/// invert this. Vanilla already scales the natural ramp x1.25 while stationary against x0.5 while
+		/// moving (Player.cs:18003) — i.e. vanilla punishes movement on that channel. Flat regen has no
+		/// such treatment, which is exactly why flat is the channel worth paying a mover on.
 		///
-		/// The lifeRegen > 0 guard is real: a vanilla DoT has already driven it negative by the time we
-		/// run, and doubling a negative would make Poison and On Fire twice as lethal.
+		/// The (int) truncation loses under half an HP/s and cannot compound — lifeRegen is an int by
+		/// nature and every vanilla contributor rounds the same way. Not worth an accumulator; the bleed
+		/// has one because it is the thing being metered, not a rate being added.
 		/// </summary>
-		public override void UpdateLifeRegen(Player player)
+		private static void ApplyMovingLifeRegen(Player player)
 		{
-			if (!player.IsStandingStillForSpecialEffects || player.lifeRegen <= 0)
+			if (player.IsStandingStillForSpecialEffects)
 				return;
 
-			player.lifeRegen = (int)(player.lifeRegen * StandingStillRegenMultiplier);
+			// lifeRegen is in HALF-HP per second, hence the 2. Getting this wrong halves the talent.
+			player.lifeRegen += (int)(player.statLifeMax2 * MovingLifeRegenFraction * 2f);
 		}
 
 		/// <summary>
@@ -474,7 +542,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
+			// The stance, both halves. Planted refills the pool, moving repairs the bar; each is the
+			// other's cost. Both sit above the early return because neither is bleed-gated.
 			SuppressPassiveManaRegen(player);
+			ApplyMovingLifeRegen(player);
 
 			if (instances.Count == 0)
 			{
@@ -625,14 +696,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 					// The mana line is the important one and is deliberately live: the pool is what
 					// decides whether this bleed costs anything at all, so the player needs to watch it
 					// draining against the debt, not be told a static rule about it. The last line is
-					// static because both of those effects always apply.
-					// The stance line is live because the pool only refills while planted — the player
-					// needs to see which of the two states they are actually in, not be told the rule.
+					// static because that effect always applies.
+					// The stance line is live and names BOTH halves of the axis, not just the one being
+					// given up. The player is choosing between two resources every frame, so the tooltip
+					// has to say what the current stance is buying as well as what it is costing —
+					// "mana will NOT recover" alone reads as a pure penalty for moving, which is exactly
+					// the misreading the 2026-07-17 rework exists to kill.
 					bool planted = player.IsStandingStillForSpecialEffects;
 
 					tip = $"Taking {(int)stagger.GetTotalStaggeredDamage()} damage over {stagger.GetLongestStaggerDuration():F1} seconds"
 						+ $"\nPaid from mana: {player.statMana}/{player.statManaMax2}"
-						+ (planted ? "\nPlanted — mana flooding back" : "\nMoving — mana will NOT recover")
+						+ (planted
+							? "\nPlanted — mana refilling, no life bonus"
+							: "\nMoving — +2% life/s, mana will NOT recover")
 						+ "\nCritical hits burn 25% of it";
 					return;
 				}

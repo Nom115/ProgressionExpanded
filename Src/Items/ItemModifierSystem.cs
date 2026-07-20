@@ -9,6 +9,7 @@ using Terraria.ModLoader;
 using Terraria.ModLoader.IO;
 using ProgressionExpanded.Items.Modifiers;
 using ProgressionExpanded.Items.Rarity;
+using ProgressionExpanded.Src.Levels.WorldLevel;
 
 namespace ProgressionExpanded.Items
 {
@@ -47,6 +48,22 @@ namespace ProgressionExpanded.Items
 			mods = newMods ?? new List<RolledModifier>();
 		}
 
+		/// <summary>
+		/// Lock this item's level to the current world level the first time it is created — for ANY
+		/// rarity, white items included. Item level is a creation-time property from then on: orbs roll
+		/// against it rather than re-stamping the current world level, so gear is tied to when you got
+		/// it (see OrbActions). Idempotent — itemLevel == 0 means "unset". Only eligible items
+		/// (weapons/armor/accessories) carry a level, since it only gates modifier tiers.
+		/// </summary>
+		public void EnsureItemLevel(Item item)
+		{
+			if (itemLevel != 0)
+				return;
+			if (!ItemCategoryClassifier.IsEligible(item))
+				return;
+			itemLevel = WorldLevelManager.GetWorldLevel();
+		}
+
 		#endregion
 
 		#region Drop rolling
@@ -61,6 +78,16 @@ namespace ProgressionExpanded.Items
 			// Only enemy-loot drops get rolled; crafting/other spawns stay untouched.
 			if (source is EntitySource_Loot loot && loot.Entity is NPC npc)
 				ItemModifierRoller.RollDrop(item, npc);
+
+			// Lock the item level at creation for every eligible item, regardless of rarity. A Normal
+			// drop (RollDrop returns early without setting state) still gets its level stamped here.
+			EnsureItemLevel(item);
+		}
+
+		/// <summary>Crafted / bought / recipe-group items: lock their level in at creation too.</summary>
+		public override void OnCreated(Item item, ItemCreationContext context)
+		{
+			EnsureItemLevel(item);
 		}
 
 		#endregion
@@ -69,33 +96,39 @@ namespace ProgressionExpanded.Items
 
 		public override void ModifyTooltips(Item item, List<TooltipLine> tooltips)
 		{
-			if (rarity == ItemRarity.Normal && (mods == null || mods.Count == 0))
+			bool rolled = rarity != ItemRarity.Normal || (mods != null && mods.Count > 0);
+
+			// A plain, unleveled item has nothing to show.
+			if (!rolled && itemLevel == 0)
 				return;
 
-			var info = ItemRarityConfig.GetInfo(rarity);
-
-			// Recolor the item name to its rarity colour.
 			int nameIndex = tooltips.FindIndex(l => l.Mod == "Terraria" && l.Name == "ItemName");
-			if (nameIndex >= 0)
-				tooltips[nameIndex].OverrideColor = info.Color;
+			var insert = new List<TooltipLine>();
 
-			// Build the lines we insert: a rarity label, then one line per rolled modifier.
-			var insert = new List<TooltipLine>
+			if (rolled)
 			{
-				new TooltipLine(Mod, "PE_Rarity", $"{info.Name} Item") { OverrideColor = info.Color }
-			};
+				var info = ItemRarityConfig.GetInfo(rarity);
 
-			if (mods != null)
-			{
-				foreach (var rolled in mods)
+				// Recolor the item name to its rarity colour.
+				if (nameIndex >= 0)
+					tooltips[nameIndex].OverrideColor = info.Color;
+
+				// A rarity label, then one line per rolled modifier.
+				insert.Add(new TooltipLine(Mod, "PE_Rarity", $"{info.Name} Item") { OverrideColor = info.Color });
+
+				if (mods != null)
 				{
-					var def = ItemModifierLoader.GetDefinition(rolled.PoolId, rolled.ModId);
-					string text = def != null ? def.Format(rolled.Value) : $"+{rolled.Value} {rolled.ModId}";
-					insert.Add(new TooltipLine(Mod, "PE_Mod_" + rolled.ModId, text) { OverrideColor = ModLineColor });
+					foreach (var rolledMod in mods)
+					{
+						var def = ItemModifierLoader.GetDefinition(rolledMod.PoolId, rolledMod.ModId);
+						string text = def != null ? def.Format(rolledMod.Value) : $"+{rolledMod.Value} {rolledMod.ModId}";
+						insert.Add(new TooltipLine(Mod, "PE_Mod_" + rolledMod.ModId, text) { OverrideColor = ModLineColor });
+					}
 				}
 			}
 
-			// Item level (transparency about tier gating).
+			// Item level (transparency about tier gating) — shown on every eligible item, even white
+			// ones, since the level is now locked at creation and drives what an orb can roll.
 			insert.Add(new TooltipLine(Mod, "PE_ItemLevel", $"Item Level {itemLevel}")
 			{
 				OverrideColor = new Color(150, 150, 150)
@@ -159,7 +192,9 @@ namespace ProgressionExpanded.Items
 		{
 			try
 			{
-				if (rarity == ItemRarity.Normal && (mods == null || mods.Count == 0))
+				// Persist if the item is rolled OR carries a locked creation-time level (white items
+				// now keep their level, so an orb later rolls against the item's origin, not "now").
+				if (rarity == ItemRarity.Normal && (mods == null || mods.Count == 0) && itemLevel == 0)
 					return;
 
 				tag["pe_rarity"] = (int)rarity;
@@ -198,7 +233,7 @@ namespace ProgressionExpanded.Items
 				// weapon that fires them), so existing saves have stacks of currency with real
 				// modifiers baked onto them. Fixing the classifier alone would leave those in place
 				// forever, because rolled state is stored per item.
-				if ((rarity != ItemRarity.Normal || mods.Count > 0)
+				if ((rarity != ItemRarity.Normal || mods.Count > 0 || itemLevel > 0)
 					&& !ItemCategoryClassifier.IsEligible(item))
 				{
 					rarity = ItemRarity.Normal;

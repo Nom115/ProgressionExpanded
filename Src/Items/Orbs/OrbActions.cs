@@ -19,15 +19,27 @@ namespace ProgressionExpanded.Items.Orbs
 
 	/// <summary>
 	/// The PoE-style crafting operations orbs perform on an item's <see cref="ItemModifierSystem"/>
-	/// state. All operations validate first and only mutate on success. Item level for any craft is
-	/// the current world level (per the world-level item-level decision), so crafting at higher
-	/// progression can roll higher modifier tiers.
+	/// state. All operations validate first and only mutate on success. Item level is LOCKED at the
+	/// item's creation (see <see cref="ItemModifierSystem.EnsureItemLevel"/>): every craft rolls
+	/// against that fixed level, not the current world level, so gear is tied to when you obtained it
+	/// and does not "catch up" by re-rolling. Items that predate the lock are stamped on first use.
 	/// </summary>
 	public static class OrbActions
 	{
 		#region Queries (used by orbs for CanApplyTo / UI enabling)
 
 		public static bool IsEligible(Item item) => ItemCategoryClassifier.IsEligible(item);
+
+		/// <summary>
+		/// The item's locked (creation-time) level. Falls back to stamping the current world level once
+		/// for items that predate the lock (e.g. worldgen-chest loot never observed at creation).
+		/// </summary>
+		private static int LockedItemLevel(Item item, ItemModifierSystem state)
+		{
+			state.EnsureItemLevel(item);
+			int ilvl = state.GetItemLevel();
+			return ilvl > 0 ? ilvl : WorldLevelManager.GetWorldLevel();
+		}
 
 		public static ItemRarity GetRarity(Item item)
 		{
@@ -59,7 +71,7 @@ namespace ProgressionExpanded.Items.Orbs
 			if (state.GetRarity() != from)
 				return OrbResult.Fail($"Requires a {ItemRarityConfig.GetInfo(from).Name} item.");
 
-			int itemLevel = WorldLevelManager.GetWorldLevel();
+			int itemLevel = LockedItemLevel(item, state);
 			var mods = new List<RolledModifier>(state.GetMods());
 
 			int targetCount = ItemRarityConfig.GetModCount(to);
@@ -89,7 +101,7 @@ namespace ProgressionExpanded.Items.Orbs
 			if (mods == null || mods.Count == 0)
 				return OrbResult.Fail("This item has no modifiers to reroll.");
 
-			int itemLevel = WorldLevelManager.GetWorldLevel();
+			int itemLevel = LockedItemLevel(item, state);
 			var rerolled = ItemModifierRoller.RollModifiers(ItemCategoryClassifier.GetPoolId(item), mods.Count, itemLevel);
 			state.SetState(state.GetRarity(), itemLevel, rerolled);
 			return OrbResult.Ok("Modifiers rerolled!");
@@ -142,7 +154,7 @@ namespace ProgressionExpanded.Items.Orbs
 			if (mods.Count >= maxCount)
 				return OrbResult.Fail($"This item is already full ({mods.Count}/{maxCount}).");
 
-			int itemLevel = WorldLevelManager.GetWorldLevel();
+			int itemLevel = LockedItemLevel(item, state);
 			var existingIds = mods.Select(m => m.ModId).ToHashSet();
 			var extra = ItemModifierRoller.RollModifiers(ItemCategoryClassifier.GetPoolId(item), 1, itemLevel, existingIds);
 			if (extra.Count == 0)

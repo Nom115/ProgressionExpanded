@@ -24,12 +24,13 @@ namespace ProgressionExpanded.Src.NPCs
 		// from that player's "sweet spot" (see GetLevelDifferenceXPMultiplier).
 		private const int BASE_XP_REWARD = 10;
 
-		// Level-difference reward curve. Reward peaks (x1.0) when the enemy is exactly
-		// OPTIMAL_LEVEL_DIFFERENCE levels above the player, and falls off on both sides so
-		// that fighting enemies around the sweet spot is the most XP-efficient.
-		private const int OPTIMAL_LEVEL_DIFFERENCE = 5;
-		private const float BELOW_OPTIMAL_FALLOFF = 0.125f; // per level under the sweet spot (+1 -> 0.5x)
-		private const float ABOVE_OPTIMAL_FALLOFF = 0.05f;  // per level over the sweet spot (gentler)
+		// Level-difference reward curve. World level tracks player level (OnLevelUp bumps it), so
+		// enemies spawn near the player's level by construction — meaning an equal-level fight is the
+		// common case, not the exception. So the reward is FULL at the player's level and above, and
+		// only tapers for enemies BELOW the player (which discourages farming trivial grey mobs).
+		// (Was a curve peaking at +5 above the player, which crushed the common equal-level kill to
+		// 0.375x -> 3 XP off a base of 10.)
+		private const float BELOW_LEVEL_FALLOFF = 0.125f; // per level the enemy is under the player (-1 -> 0.875x)
 		private const float MIN_XP_MULTIPLIER = 0.1f;
 		private const float MAX_XP_MULTIPLIER = 1.0f;
 
@@ -315,26 +316,20 @@ namespace ProgressionExpanded.Src.NPCs
 		}
 
 		/// <summary>
-		/// Reward multiplier based on how far this enemy's level sits above the player's.
-		/// Peaks at x1.0 when the enemy is exactly OPTIMAL_LEVEL_DIFFERENCE (+5) levels above
-		/// the player, and tapers off on both sides so the sweet spot is the most XP-efficient.
-		/// Example, level 10 player: a +5 (level 15) enemy -> x1.0; a +1 (level 11) enemy -> x0.5.
+		/// Reward multiplier based on how far this enemy's level sits from the player's. Enemies at
+		/// the player's level or above pay FULL XP (x1.0); enemies below the player pay less, tapering
+		/// by BELOW_LEVEL_FALLOFF per level down to MIN_XP_MULTIPLIER. Since world level tracks player
+		/// level, equal-level fights are the norm — so the common overworld kill now pays full.
+		/// Example, level 10 player: a level-10 (or higher) enemy -> x1.0; a level-6 enemy -> x0.5.
 		/// </summary>
 		public static float GetLevelDifferenceXPMultiplier(int enemyLevel, int playerLevel)
 		{
 			int difference = enemyLevel - playerLevel;
 
-			float multiplier;
-			if (difference <= OPTIMAL_LEVEL_DIFFERENCE)
-			{
-				// Ramp up to the sweet spot: each level below it costs BELOW_OPTIMAL_FALLOFF.
-				multiplier = MAX_XP_MULTIPLIER - BELOW_OPTIMAL_FALLOFF * (OPTIMAL_LEVEL_DIFFERENCE - difference);
-			}
-			else
-			{
-				// Taper off above the sweet spot (gentler, but still keeps +5 the peak).
-				multiplier = MAX_XP_MULTIPLIER - ABOVE_OPTIMAL_FALLOFF * (difference - OPTIMAL_LEVEL_DIFFERENCE);
-			}
+			// Equal-level and above: full XP. Below: taper off, so trivial mobs are worth less.
+			float multiplier = difference >= 0
+				? MAX_XP_MULTIPLIER
+				: MAX_XP_MULTIPLIER - BELOW_LEVEL_FALLOFF * (-difference);
 
 			return System.Math.Clamp(multiplier, MIN_XP_MULTIPLIER, MAX_XP_MULTIPLIER);
 		}

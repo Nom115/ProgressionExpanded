@@ -122,13 +122,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Stats
 					// regardless of what order contributions arrive in.
 					player.statDefense *= 1f + value;
 					break;
-				case "LifeRegenPercent":
-					// Only scale regeneration, never degeneration. lifeRegen goes negative while a
-					// DoT ticks, so multiplying unconditionally would make every Bleeding/Poison/
-					// On Fire tick proportionally MORE lethal — a life-regen bonus that hurts you.
-					if (player.lifeRegen > 0)
-						player.lifeRegen = (int)(player.lifeRegen * (1f + value));
-					break;
+				// LifeRegenPercent is deliberately NOT here — see ApplyLifeRegenPercent below. It is the
+				// third category of key, alongside the ModifyMaxStats-only ones: a key whose only correct
+				// home is one specific hook, so routing it through this switch is what broke it.
 
 				// Tertiary
 				case "Knockback":
@@ -153,6 +149,41 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Stats
 					player.GetModPlayer<CombatEffectStats>().AreaPercent += value * 100f;
 					break;
 			}
+		}
+
+		/// <summary>
+		/// The LifeRegenPercent key. <b>Call this from UpdateLifeRegen and nowhere else</b> — it is not
+		/// in ApplyPercent's switch, and that is the fix rather than an inconsistency.
+		///
+		/// <b>What was wrong (fixed 2026-07-17).</b> It used to be an ordinary ApplyPercent case, which
+		/// meant it ran from PostUpdateMiscEffects, and it was very nearly dead code twice over:
+		/// - <b>Wrong hook.</b> PostUpdateMiscEffects fires immediately BEFORE Player.UpdateLifeRegen
+		///   (Player.cs:24940/24941), so at that point lifeRegen holds none of the campfire (:17931),
+		///   heart lantern (:17934) or gear/buff regen it is supposed to scale. It multiplied an almost
+		///   empty number. This is the same wrong-hook bug that made Vengeance's regen line dead until
+		///   2026-07-16 and that Juggernaut's potion burst was written to avoid.
+		/// - <b>Wrong ORDER, which is the subtler half.</b> tML autoloads ModPlayers sorted by
+		///   type.FullName (Mod.cs:569, StringComparer.InvariantCulture), so
+		///   ...PlayerSystems.PassivePoints.PassiveTreeManager always registers before
+		///   ...PlayerSystems.Talents.TalentPlayer — P before T. Every hook list inherits that order, so
+		///   Second Wind fired before TalentPlayer had contributed anything at all, and could not scale
+		///   Stagger's +8/s or Juggernaut's Strength regen no matter what number it was given.
+		///
+		/// From UpdateLifeRegen both problems go away and neither can come back by accident: the hook
+		/// runs after every flat contributor, ours and vanilla's alike, so there is nothing left to be
+		/// ordered against. Two contributors both multiplying is order-independent anyway.
+		///
+		/// <b>The lifeRegen > 0 guard is load-bearing, not defensive.</b> lifeRegen is NEGATIVE while a
+		/// vanilla DoT ticks — the debuff block at :17914 has already run by the time we get here — so an
+		/// unguarded multiply would make every Bleeding/Poisoned/On Fire tick proportionally MORE lethal:
+		/// a life-regen bonus that kills you. Same guard, same reason, as RoyalJelly and Fleshless.
+		/// </summary>
+		public static void ApplyLifeRegenPercent(Player player, float value)
+		{
+			if (value == 0f || player.lifeRegen <= 0)
+				return;
+
+			player.lifeRegen = (int)(player.lifeRegen * (1f + value));
 		}
 	}
 }

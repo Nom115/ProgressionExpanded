@@ -632,14 +632,40 @@ Five levers landed together → **65.3 HP/s**, 158 defense. **Still last of the 
 - [ ] **Play-test all of it.** Every constant is a first guess.
 - [ ] **Is "still last on sustain" actually wrong?** Juggernaut carries ×1.40 DPS and the hit cap,
       neither of which an HP/s column expresses. Do not chase parity on that number alone.
-- [x] ~~**Stagger's `StandingStillRegenMultiplier` (×2)** is moot if §2 lands~~ — **not moot: the flat
-      regen was KEPT** when §2 landed, so the multiplier still does its job. See §2 Resolutions.
-- [ ] **`StatApplier.cs:125-131` (`LifeRegenPercent`) has the same wrong-hook bug Vengeance just had** —
-      it amplifies `lifeRegen` from `PostUpdateMiscEffects`, which runs *before* `UpdateLifeRegen`
-      populates it with gear/buff regen. So every `LifeRegenPercent` source in the mod (masteries, item
-      rolls) is probably scaling almost nothing. Vengeance's copy was moved on 2026-07-16; this one is a
-      wider refactor touching the mastery tree, so it was left alone. **Likely a live bug affecting real
-      player stats — worth confirming early.**
+- [x] ~~**Stagger's `StandingStillRegenMultiplier` (×2)** is moot if §2 lands~~ — ~~not moot: the flat
+      regen was KEPT~~ — **REMOVED 2026-07-17**, but for a design reason, not this one. It gave planting
+      mana *and* extra life regen, so planting was better at everything and the stance had one real
+      answer. Replaced by `MovingLifeRegenFraction` (2% of max life/s **while moving**), making one axis
+      with two opposed answers: planted refills mana, moving repairs life. The flat +8/s stays and now
+      applies in both stances. Model: `.scripts/stagger_stance.py`. **Untested in play.**
+- [x] ~~**`StatApplier.cs:125-131` (`LifeRegenPercent`) has the same wrong-hook bug Vengeance just had**~~
+      — **FIXED 2026-07-17.** Confirmed live, and it was **worse than logged**: on top of the wrong hook,
+      tML autoloads ModPlayers by `type.FullName` (`Mod.cs:569`), so `...PassivePoints.PassiveTreeManager`
+      **always** ran before `...Talents.TalentPlayer` — P before T — meaning Second Wind fired before
+      `TalentPlayer` had contributed anything and could not scale Stagger's +8/s or Juggernaut's Strength
+      regen **at all**, at any number. Now `StatApplier.ApplyLifeRegenPercent`, called from
+      `UpdateLifeRegen` by both contributors; it is out of `ApplyPercent`'s switch entirely (third key
+      category, like the `ModifyMaxStats`-only ones). See CLAUDE.md §8.
+      - ⚠️ **Knock-on to watch in play-test: Second Wind went from ~nothing to ×2 on ALL regen at rank 4**
+        (4 points) — ours *and* campfire/heart lantern/gear. It is the biggest single balance change in
+        this pass and nobody has felt it yet.
+      - **Generalise the ordering half:** any cross-ModPlayer "A scales B" landing in the same hook is
+        silently decided by namespace alphabetical order. `ItemModifierApplier`'s four switches are the
+        next place to check for this shape.
+- [ ] **Second Wind's description is a misnomer** — `warrior_tree.json` says "increased natural life
+      regeneration", but `LifeRegenPercent` is applied from the `UpdateLifeRegen` hook (`Player.cs:17938`)
+      and the natural ramp is not added to `lifeRegen` until `:18027`, *after* it. So it scales the
+      flat/gear/campfire pile and **cannot touch the natural ramp at all**. The ramp's only seam is
+      `PlayerLoader.NaturalLifeRegen` (`:18024`) → `TalentBehaviour.NaturalLifeRegen`, still zero
+      overriders. Either reword the node ("increased life regeneration") or add a real ramp bonus. The
+      reword is almost certainly right — scaling the ramp is a much weaker effect than what it does now.
+- [ ] **Audit the "DoTs zero all regen" claim wherever it appears.** ⚠️ It is **false as stated** and was
+      written into several comments: the zeroing at `Player.cs:17749-17852` is **positional**, wiping only
+      what was contributed *before* it. Vanilla's Hearty Meal/campfire/heart lantern (`:17928/17930/17934`)
+      and the whole `UpdateLifeRegen` hook (`:17938`) come after and survive. Poisoned + campfire + lantern
+      is **−1**, not 0; with honey it is **+3**, i.e. positive under a DoT. Corrected in CLAUDE.md §8 (full
+      frame-order table) and in `StaggerTalent`/`JuggernautTalent`; **check `VengeanceTalent` and
+      `Fleshless`**, which were written under the same assumption.
 - [ ] **`EvilTalents.cs:117` (Devourer's kill-burst) calls `LifeLeechApplier.Heal` directly**, which
       never reads `HealingPercent`. Vengeance's comment used to claim the channel covered it; the comment
       is now corrected, but decide whether that's a doc bug or a missing multiply.
@@ -831,3 +857,84 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
       `defense = defDefense` **every frame** (`aiStyle 11` Skeletron `NPC.cs:22154`, EoC, Golem, Prime).
       So on those enemies `ToughModifier` and the rarity defense bump **do nothing at all**. Wider than
       the elemental system — it silently eats a whole affix on every boss with those aiStyles.
+
+---
+
+## 7. ✅ IMPLEMENTED (2026-07-20): post-EoC play-test follow-up pass
+
+> From a play-test through Eye of Cthulhu. Stagger's boss curve is good; Vengeance edges it on EoC
+> (bleed blocks regen — accepted, an accessory counters it). **Juggernaut still unplayable** (no
+> sustain even with the 15s potion) — NOT addressed in this pass, still open (§5/§5a/§5b). Seven
+> changes shipped; **all compile (`dotnet build -t:Compile`, DLL verified), zero Build+Reload.**
+
+### 7a. XP curve — recenter the level-difference multiplier
+
+Reported: *"mobs giving 3 XP at level 13 doesn't feel good."* Correct. `GetLevelDifferenceXPMultiplier`
+peaked at **+5** above the player, but `OnLevelUp` bumps world level every level so `playerLevel ==
+worldLevel` and spawns sit near offset 0 → `1.0 - 0.125×5 = 0.375` → base 10 truncates to **3**.
+
+- **Change:** equal-level *and above* now pay full `MAX_XP_MULTIPLIER` (1.0); only *below*-level enemies
+  taper (`BELOW_LEVEL_FALLOFF = 0.125`/level, floor `MIN_XP_MULTIPLIER = 0.1`). Removed
+  `OPTIMAL_LEVEL_DIFFERENCE`/`ABOVE_OPTIMAL_FALLOFF`. Equal-level common **3 → 10 XP**.
+- **User chose the minimal "recenter only" fix** — base XP stays flat 10, quadratic
+  `GetXPRequiredForLevel` untouched. So late-game kills-per-level still climbs (accepted). If it feels
+  grindy later, the next lever is scaling `BASE_XP_REWARD` with world level.
+
+### 7b. Rarity XP — steepen the top tiers
+
+The mod-rarity `XPMultiplier` was already live (`GetTotalXPMultiplier`) but invisible under the 0.375×
+crush. Recentering (7a) makes it show; also steepened `EnemyRarity.cs`: Uncommon 1.3→**1.5**, Rare
+1.6→**2.0**, Epic 2.0→**3.0**, Legendary 2.5→**5.0**, Mythic 3.0→**8.0**. A Mythic equal-level kill now
+reads ~80 XP vs a common's 10, in the existing `+{amount} XP` text. **All first guesses.**
+
+### 7c. Item level LOCKED at creation (reverses a documented design)
+
+Was world level at *craft* time, re-stamped every orb op. Now stamped once at creation for **any
+rarity** (`ItemModifierSystem.EnsureItemLevel` from `OnCreated` + `OnSpawn`), and orbs
+(`OrbActions.LockedItemLevel`) roll against the stored level. White items persist a level + show the
+tooltip line. **Gear now ages out** rather than catching up via re-rolls — this contradicts the §11/
+hotspot-curve framing in `CLAUDE.md`, now flagged stale there.
+- ⚠️ **Worldgen-chest / pre-lock items** are stamped on first orb use (fallback), not true birth.
+- ⚠️ **Watch:** does aging-out gear feel bad? The whole re-roll-to-stay-current economy assumed the
+  opposite. May need re-tuning the drop curve toward fresh-base drops.
+
+### 7d. Orb rename (display-only, save-safe)
+
+Localization only: `OrbOfAlteration` (Uncommon→Magic) → **"Orb of Augmentation"**; `OrbOfAugmentation`
+(add-a-mod) → **"Exalted Orb"**. Classes keep their names so save inventories don't lose orbs; display
+≠ class, commented in code. Chain reads Transmutation → Augmentation → Regal → Ascendance → Cataclysm.
+
+### 7e. Non-functional stats no longer roll on weapons
+
+`movement_speed`, `max_life`, `defense`, `life_regen`, `endurance` removed from all four weapon pools —
+a held weapon only routes damage/crit/knockback (`ModifyWeapon*`) and attack-speed/mana/armor-pen/
+leech/heal/ailment/area (`ApplyHeldWeaponStats`), so those five rolled, showed, ate a slot, and did
+**nothing**. Kept on armor/accessory pools. Weapons already carrying one in the save keep it until
+re-rolled (`LoadData`'s strip only fires for ineligible *items*).
+
+### 7f. Four playstyle masteries
+
+`NotablePassives/PlaystyleMasteries.cs` + 4 `warrior_tree.json` nodes. **Close Quarters** (within 10
+tiles: +10%/rank dealt & taken, MaxTier 3), **Momentum** (+8%/rank while moving, MaxTier 4),
+**Executioner** (+10%/rank vs <35% life, MaxTier 4), **Adrenaline** (+5%/rank attack speed 4s on kill,
+MaxTier 4). All proportional, `FinalDamage`/`GetDamage`, no defense cliff. Design line: *talents change
+your build, masteries change how you play.* **All constants first guesses.**
+
+### 7g. Dread Gaze reworked (was "boring — flat 25% damage")
+
+Reported boring: "within 30 tiles" is nearly the whole screen, so for a melee it was just +25% damage.
+Now a **single-target Dread ramp**: hitting the same enemy stacks Dread (max 6), each stack = +8% damage
+taken from you (`FinalDamage`) + −3 defense shred; switching targets resets; decays after 3s idle.
+Boss/elite-hunter identity, scales with attack speed — distinct from Unblinking Eye (crit) and Second
+Phase (low-life). Per-instance fields, SP-focused (like `StaggerTalent`). No migration: Id stays
+`dread_gaze`. Constants `MaxStacks 6 / DamagePerStack 0.08 / DefensePerStack 3 / DecayTicks 180` are
+**first guesses.**
+
+### Still open (this pass)
+
+- [ ] **Build+Reload and play-test all seven.** Every constant is a first guess.
+- [ ] **Juggernaut is STILL unplayable** (the headline play-test complaint) — untouched here. See §5a;
+      the flat sustain fades and the report predates even that. Needs its own pass.
+- [ ] **Item-level lock (7c):** does gear aging out feel bad? Re-tune the drop curve if so.
+- [ ] **Masteries + Dread Gaze numbers** unfelt in-game; Close Quarters' proximity scan is one
+      `Main.npc[]` loop/frame (cheap, but confirm no swarm-frame cost).

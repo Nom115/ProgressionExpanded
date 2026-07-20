@@ -6,7 +6,11 @@ namespace ProgressionExpanded.Items.Orbs
 	// NOTE: new orbs reuse existing PNGs as placeholder art — swap in dedicated sprites later.
 	// (Orb of Transmutation itself lives in Items/Materials and is retrofitted there.)
 
-	/// <summary>Uncommon → Magic.</summary>
+	/// <summary>
+	/// Uncommon → Magic — the tier-upgrade orb used right after Transmutation.
+	/// Displays as "Orb of Augmentation" (see the localization file). The class keeps its old name so
+	/// existing save inventories don't lose their orbs on the rename; display name ≠ class name here.
+	/// </summary>
 	public class OrbOfAlteration : UpgradeOrbItem
 	{
 		public override string Texture => "ProgressionExpanded/Assets/Items/Materials/OrbOfTransmutation";
