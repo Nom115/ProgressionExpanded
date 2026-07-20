@@ -933,8 +933,121 @@ Phase (low-life). Per-instance fields, SP-focused (like `StaggerTalent`). No mig
 ### Still open (this pass)
 
 - [ ] **Build+Reload and play-test all seven.** Every constant is a first guess.
-- [ ] **Juggernaut is STILL unplayable** (the headline play-test complaint) — untouched here. See §5a;
-      the flat sustain fades and the report predates even that. Needs its own pass.
+- [x] **Juggernaut is STILL unplayable** (the headline play-test complaint) — ✅ addressed in **§8**
+      (2026-07-20): reworked into Resolve (harden under fire). Its flat sustain (§5a) is now proportional
+      and movement-agnostic.
 - [ ] **Item-level lock (7c):** does gear aging out feel bad? Re-tune the drop curve if so.
 - [ ] **Masteries + Dread Gaze numbers** unfelt in-game; Close Quarters' proximity scan is one
       `Main.npc[]` loop/frame (cheap, but confirm no swarm-frame cost).
+
+---
+
+## 8. ✅ IMPLEMENTED (2026-07-20): Juggernaut → Resolve (harden under fire)
+
+**The complaint:** play-test found Juggernaut the trap pick — "completely unplayable", out-sustained by
+Vengeance. The three models confirmed it is *structural*, not numbers:
+
+- **Only pinnacle whose staying-power is flat.** Stagger heals 2%/s of max life + a mana pool sized to
+  its life; Vengeance leeches 30% of damage dealt (scales with weapons). Juggernaut's regen was
+  `RegenPerStrength × strength` — fixed ~40 HP/s, never grows. `juggernaut_sustain.py`: **65 vs 144 vs
+  111 HP/s**, gap widening with WL.
+- **Hit cap dormant** until ~WL50+ (`juggernaut_stuck.py`); defense binds mid-game, and the
+  Juggernaut-specific DefensePercent was removed 2026-07-17, so its real mitigation was just the 50%
+  warrior Endurance baseline everyone gets.
+- **−50% move was pure cost** — holding ground bought nothing.
+
+**First cut was Entrenchment (ramp while *planted*); replaced by Resolve the same day.** The user flagged
+the flaw directly: *"for a tank that needs to stand still for value, it struggles to just stand still."*
+Entrenchment paid out only while perfectly still — unreachable in a bullet-hell boss fight, and −50% move
+makes it worse — so its mitigation peaked when safe and vanished under pressure, the *exact* anti-synergy
+the mod already fought on Vengeance's ramp (the 4s→10s window fix). The user chose "harden under fire"
+from three offered directions.
+
+**The fix — Resolve** (`JuggernautTalent.cs`). Change the driver from *position* to *being hit*.
+`resolve ∈ [0,1] = clamp(recentDamage/statLifeMax2 × ResolvePerLifeFraction, 0, 1)` over a
+`ResolveWindowSeconds` (10s) sliding window — reuses Vengeance's `recentHits`/`DamageEntry` pattern
+(`PostHurt` records `info.Damage`; `PostUpdate` ages entries; `OnRespawn`/`OnDeactivate` clear). Scales
+**both** payoffs together, in `PostUpdateMiscEffects` (`ApplyResolve`):
+- **Endurance** `+= ResolveEndurance(0.20) × resolve`, clamped to 1 → up to +20% multiplicative DR on top
+  of the 50% warrior baseline (70% total). No subtractive-defense cliff (§5b). Order-safe: `ClassBaselines`
+  (adds 0.50) runs before `TalentPlayer` (namespace-alphabetical, §8-of-CLAUDE).
+- **Proportional regen** `lifeRegen += (int)(statLifeMax2 × ResolveRegenFraction(0.04) × resolve × 2f)` —
+  the exact Stagger `ApplyMovingLifeRegen` shape; up to 4% of max life/s. Unguarded add; DoTs still
+  positionally zero it; Second Wind scales it; the potion burst multiplies it.
+- **Movement-agnostic** — hardens whether you plant or kite; peaks under fire, which is when a tank wants
+  it. **Ceilings unchanged from Entrenchment; only the driver changed.**
+- **Self-stabilising:** the window records *post-mitigation* damage, so a tankier wall records smaller
+  hits → Resolve settles at equilibrium, no spiral. **DoTs never build it** (bypass `Player.Hurt`/`PostHurt`,
+  like the hit cap). **`noKnockback` dropped** with the plant stance it protected.
+
+Removed the flat `RegenPerStrength` line (replaced); kept Strength→defense (+1%/pt). Hit cap, potions,
+×1.65 damage, −50% move all **unchanged**. No migration (Id stays `juggernaut`).
+
+**Also:** `Src/UI/EntrenchmentReadout.cs` → **`ResolveReadout.cs`** (mirrors `VengeanceReadout`) draws
+"Resolve {n}% / +{dr}% damage reduction" while Juggernaut is picked and ramping; four `ProgressionConfig`
+toggles (renamed `Resolve*`) + hjson localization. CLAUDE.md §5/§6 updated.
+
+**Chosen target: "best pure tank"** (user pick) — clearly toughest. ⚠️ **Watch-items:**
+- Constants `ResolveWindowSeconds(10) / ResolvePerLifeFraction(1.5) / ResolveEndurance(0.20) /
+  ResolveRegenFraction(0.04)` are **all first guesses**.
+- **Higher uptime than Entrenchment would have — the intended buff, and the thing to watch.** In a boss
+  fight you take chip damage nearly continuously, so Resolve sits near cap most of the fight (vs
+  Entrenchment's ~0% uptime while dodging). Ceiling is identical; effective mitigation far higher. If it
+  over-delivers: **lower the ceiling** (`ResolveEndurance`/`ResolveRegenFraction`) or **slow the ramp**
+  (`ResolvePerLifeFraction` down → needs more damage to cap), never the hit cap.
+- **Accepted risk: near-immunity at low WL** (tanks already are — `mitigation_model.py`). Endurance is
+  multiplicative → strong-everywhere, not an immune-or-dead cliff.
+- **Fargo Eternity clamps `Player.endurance` to 0.75.** 70% is under it; bumping `ResolveEndurance` to
+  0.25 hits the cap exactly and makes Stoneskin redundant on Fargo.
+
+- [ ] **Build+Reload and play-test.** Zero of it has been in-game. Verify: take boss hits **while dodging**
+      → DR + regen climb as damage accumulates (readout), stop → fade over ~10s; hit cap still stops
+      one-shots; out-lasts the same fight on Vengeance now, without standing still.
+
+---
+
+## 9. ✅ IMPLEMENTED (2026-07-20): Vengeance → Vengeful Recovery (MoP-style boss sustain)
+
+**The ask:** buff Vengeance's longevity vs bosses — make the reward scale with the *absolute* value of
+damage taken (the Mists-of-Pandaria Vengeance mechanic), so a bigger, harder-hitting boss sustains you
+more. User chose (from three offered) **"split: absolute heal-return, damage ramp unchanged."**
+
+**The fix — Vengeful Recovery** (`VengeanceTalent.cs`). The damage/heal **ramp is untouched** (still
+`1.5 × recentDamage/maxLife`, cap +100%, progression-stable). Added one sustain source: **recover** a
+**scaling share** of the **absolute** damage in the 10s window. Reuses the existing `recentHits`
+window / `GetRecentDamage()`.
+- **Keys off raw hit-size, not fraction-of-max** → bigger boss = more sustain. That absolute basis is
+  the deliberate *exception* to Vengeance's fraction-of-max rule, and the whole point of the change.
+- **The share SCALES with hit size (added 2026-07-20 after the first flat-20% cut).** User feedback: a
+  flat 20% "should heal for a lot more" against a big hit — and a lone 800 hit read as only +16 HP/s
+  because its 160 HP was smeared across the 10s window. So the share now **climbs** 20%
+  (`RecoveryFractionBase`) → 50% (`RecoveryFractionMax`), via `GetRecoveryFraction`:
+  `Base + (Max−Base) × (GetCurrentBonus / MaxRampBonus)` — the same normalized "how hurt am I" curve the
+  ramp uses (maxes at ~67% of max life taken in the window). A big single hit now heals a
+  *disproportionately* larger slice (a 800 hit on a 1000 pool → 50% share → 400 HP vs 160 before).
+  ⚠️ **Not the double-dip:** the share is driven by ramp *progress*, the *amount* stays absolute and is
+  never × `(1 + bonus)`. Share tracks fraction-of-max so it stays progression-stable.
+- ⚠️ **It is HEALING, not regen** (the first cut used `lifeRegen +=`; corrected the same day — regen is
+  the one thing Vengeance's sustain is *not*, its identity is leech). Paid through `LifeLeechApplier.Heal`,
+  the same real-heal path leech uses (`statLife +=`, no overheal, green number), on a
+  `RecoveryHealIntervalTicks` (30) cadence to avoid per-frame popup spam. `ApplyVengefulRecovery` runs in
+  `PostUpdate` (so `HealingPercent` is current). Amplified by `HealingPercent` like leech; **not**
+  DoT-zeroed, **not** ramp-multiplied, **not** `ConsumableHealingPercent`.
+- **Self-limiting** (`RecoveryFractionMax` 0.50 `< 1`): even at full ramp the return is half the incoming
+  rate, so a Vengeance still bleeds against every boss — just slower the bigger it is. Risk identity kept.
+- **HUD:** `VengeanceReadout` gained a "+N HP/s recovered" line (`GetRecoveryPerSecond(player)`), which
+  now reflects the climbing share, not just the absolute amount.
+
+Model `.scripts/vengeance_recovery.py` (run): share climbs 20%→50% (single hits 25%→50% as a hit grows
+100→800); recovery HP/s scales with boss size; at 0% Healing it stays ≤50% of incoming, so it never
+out-heals the boss. No migration (Id stays `vengeance`).
+
+⚠️ **Watch-items (both `RecoveryFractionBase` 0.20 / `RecoveryFractionMax` 0.50 are first guesses):**
+`RecoveryFractionMax` is the primary dial — lower it if boss fights feel unkillable (stacks with 30% leech
++ the ramp's healing/regen multiply + potions). **+HealingPercent gear** scales this like leech, so at max
+share + 100% Healing the return reaches ~break-even against a full-ramp boss *from this channel alone*
+(before leech) — the intended boss power-fantasy, but the thing to watch first. Small fights barely change
+(~20%→~33% at 30 DPS), as intended.
+
+- [ ] **Build+Reload and play-test.** Verify recovery HP/s scales visibly with a harder-hitting boss and
+      that Vengeance still loses life against bosses (not immortal).

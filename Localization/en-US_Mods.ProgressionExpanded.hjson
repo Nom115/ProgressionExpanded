@@ -60,6 +60,7 @@ Configs: {
 			HealthBarSettings: Health Bar Settings Header
 			ManaBarSettings: Mana Bar Settings
 			VengeanceReadoutSettings: Vengeance Readout Settings
+			ResolveReadoutSettings: Resolve Readout Settings
 		}
 
 		ShowXPBar: {
@@ -165,6 +166,26 @@ Configs: {
 		VengeanceReadoutScale: {
 			Label: Vengeance Readout Scale
 			Tooltip: Size multiplier for the Vengeance readout
+		}
+
+		ShowResolveReadout: {
+			Label: Show Resolve Readout
+			Tooltip: Show how hardened you are and the damage reduction it is buying. Only appears while the Juggernaut talent is picked and taking fire.
+		}
+
+		ResolveReadoutX: {
+			Label: Resolve Readout X
+			Tooltip: Horizontal position (pixels from left)
+		}
+
+		ResolveReadoutY: {
+			Label: Resolve Readout Y
+			Tooltip: Vertical position (pixels from bottom)
+		}
+
+		ResolveReadoutScale: {
+			Label: Resolve Readout Scale
+			Tooltip: Size multiplier for the Resolve readout
 		}
 	}
 }

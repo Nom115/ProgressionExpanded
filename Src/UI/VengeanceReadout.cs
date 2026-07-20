@@ -30,6 +30,7 @@ namespace ProgressionExpanded.Src.UI
 		private static readonly Color LabelColor = new Color(255, 190, 190);
 		private static readonly Color RampColor = new Color(255, 80, 80);
 		private static readonly Color MaxedColor = new Color(255, 215, 0);
+		private static readonly Color RecoveryColor = new Color(150, 230, 160);
 
 		private ProgressionConfig Config => ModContent.GetInstance<ProgressionConfig>();
 
@@ -51,13 +52,15 @@ namespace ProgressionExpanded.Src.UI
 				return;
 
 			float bonus = vengeance.GetCurrentBonus(player);
+			float recovery = vengeance.GetRecoveryPerSecond(player);
 
 			DrawReadout(
 				spriteBatch,
 				new Vector2(Config.VengeanceReadoutX, Main.screenHeight - Config.VengeanceReadoutY),
 				Config.VengeanceReadoutScale,
 				damage,
-				bonus);
+				bonus,
+				recovery);
 
 			base.Draw(spriteBatch);
 		}
@@ -77,7 +80,7 @@ namespace ProgressionExpanded.Src.UI
 			return null;
 		}
 
-		private void DrawReadout(SpriteBatch spriteBatch, Vector2 position, float scale, float damage, float bonus)
+		private void DrawReadout(SpriteBatch spriteBatch, Vector2 position, float scale, float damage, float bonus, float recovery)
 		{
 			DynamicSpriteFont font = FontAssets.MouseText.Value;
 
@@ -85,13 +88,18 @@ namespace ProgressionExpanded.Src.UI
 			// for the ramp (still taking damage) without getting any more out of it.
 			bool maxed = bonus >= VengeanceTalent.MaxRampBonus;
 
-			string damageText = $"{(int)damage} damage taken ({VengeanceTalent.WindowSeconds:0.#}s)";
 			string bonusText = $"Vengeance +{(int)(bonus * 100f)}% damage & healing";
+			string damageText = $"{(int)damage} damage taken ({VengeanceTalent.WindowSeconds:0.#}s)";
+			// Vengeful Recovery — a real heal (like leech). Grows against a harder-hitting boss on two
+			// counts: the absolute damage above, and the recovery SHARE itself, which climbs from 20% up
+			// to 50% the harder you are being chunked.
+			string recoveryText = $"+{(int)recovery} HP/s recovered";
+
+			float lineHeight = font.MeasureString(bonusText).Y * scale;
 
 			Terraria.Utils.DrawBorderString(spriteBatch, bonusText, position, maxed ? MaxedColor : RampColor, scale);
-
-			Vector2 lineOffset = new Vector2(0f, font.MeasureString(bonusText).Y * scale);
-			Terraria.Utils.DrawBorderString(spriteBatch, damageText, position + lineOffset, LabelColor, scale);
+			Terraria.Utils.DrawBorderString(spriteBatch, damageText, position + new Vector2(0f, lineHeight), LabelColor, scale);
+			Terraria.Utils.DrawBorderString(spriteBatch, recoveryText, position + new Vector2(0f, lineHeight * 2f), RecoveryColor, scale);
 		}
 	}
 

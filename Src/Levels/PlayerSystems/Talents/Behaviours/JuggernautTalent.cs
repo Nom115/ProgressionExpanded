@@ -39,24 +39,36 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// of the second one is not on the table. It buys a guaranteed second hit's worth of reaction time,
 	/// not immortality.
 	///
-	/// <b>Its sustain is regeneration and potions, and Strength is what pays for both</b> (added
-	/// 2026-07-16). Before that this talent had NO sustain whatsoever — 3.3 HP/s from vanilla potions,
-	/// against Stagger's 144 and Vengeance's 111 (.scripts/juggernaut_sustain.py). It was not merely
-	/// behind; it was the only pinnacle with no way to recover life at all, and the -50% movement means
-	/// it cannot disengage to lean on the natural regen ramp the way the other two can.
+	/// <b>Resolve is the wall's staying power</b> (reworked 2026-07-20, replacing Entrenchment). The
+	/// more damage you have taken in the last ResolveWindowSeconds, the harder you become — a 0..1 value
+	/// driven by a sliding damage window (the exact shape as Vengeance's ramp), NOT by standing still. It
+	/// scales two proportional payoffs together: up to +20% damage reduction (Player.endurance —
+	/// multiplicative, so no subtractive-defense cliff, CLAUDE.md §5b) and up to 4% of maximum life per
+	/// second in regen (the same scaling shape as Stagger's moving 2%/s).
 	///
-	/// The shape is deliberate and it is NOT a rival to leech: every number here is flat, so it fades
-	/// as world level scales enemy damage (todo.md §3). That is the same structural flaw that made
-	/// Stagger the weakest pinnacle, and it is accepted here rather than solved, because Juggernaut's
-	/// late-game answer is the hit cap — the only defense in the mod that is proportional to anything.
-	/// Regen is what carries it through the early and middle game, where the model says the hole was.
+	/// It is movement-agnostic on purpose. Entrenchment (the design this replaces) paid out only while
+	/// perfectly still — unreachable in a bullet-hell boss fight where you must dodge, doubly so under
+	/// this talent's -50% movement — so its mitigation peaked when you were safe and vanished under
+	/// pressure. That is the exact anti-synergy the mod already fought on Vengeance's ramp
+	/// ("it peaks at exactly the moment you most need to leave"). Resolve inverts it: it peaks precisely
+	/// when you are being pounded, whether you are planted or kiting.
 	///
-	/// <b>Vanilla DoTs switch this whole engine off, and that is the point.</b> The Strength regen is
-	/// added in PostUpdateMiscEffects, so it lands in lifeRegen BEFORE Player.UpdateLifeRegen's debuff
-	/// block runs `if (lifeRegen > 0) lifeRegen = 0` for Poisoned/On Fire/etc — exactly like Stagger's
-	/// flat regen and every other regen source. DoTs already bypass the hit cap (they never touch
-	/// Player.Hurt), so they were already the wall's answer key; now they shut off its sustain too.
-	/// Potions are the counter-play, because a direct heal is not regeneration and ignores all of it.
+	/// <b>Self-stabilising, not spiralling.</b> The window records POST-mitigation damage
+	/// (Player.HurtInfo.Damage), so as Resolve raises endurance each hit lands smaller and therefore
+	/// records smaller — Resolve settles at an equilibrium instead of running away. Reaching the cap
+	/// takes genuinely heavy incoming fire, which is the point. This REPLACES the old flat Strength
+	/// regen, the only pinnacle sustain that did not scale (65 HP/s against Stagger's 144 and Vengeance's
+	/// 111, .scripts/juggernaut_sustain.py) and faded further every world level; Resolve's regen is
+	/// proportional, so it holds forever.
+	///
+	/// <b>Vanilla DoTs never build Resolve and switch its regen off, and both are the point.</b> DoTs
+	/// bypass Player.Hurt/PostHurt entirely, so they never enter the window — the same reason they bypass
+	/// the hit cap; they remain the wall's answer key. And the Resolve regen is a flat ADD in
+	/// PostUpdateMiscEffects, so it lands in lifeRegen BEFORE Player.UpdateLifeRegen's debuff block runs
+	/// `if (lifeRegen > 0) lifeRegen = 0` for Poisoned/On Fire/etc — exactly like Stagger's moving regen
+	/// and every other regen source. Potions are the counter-play, because a direct heal is not
+	/// regeneration and ignores all of it. The damage-reduction half still applies under a DoT — only the
+	/// regen is switched off.
 	/// </summary>
 	public class JuggernautTalent : TalentBehaviour
 	{
@@ -65,9 +77,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Juggernaut";
 
 		public override string Description =>
-			"+50% maximum life. 65% more damage. No single hit can take more than half "
-			+ "of your maximum life. Each point of Strength also grants +1 life regeneration per second "
-			+ "and +1% defense. Healing potions recharge four times faster, heal 50% more, and double "
+			"+50% maximum life. 65% more damage. No single hit can take more than half of your maximum "
+			+ "life. RESOLVE: the more damage you have taken in the last 10 seconds, the harder you "
+			+ "become — up to 20% damage reduction and 4% of your maximum life per second in regeneration "
+			+ "— strongest while you are under fire and fading in a lull. Each point of Strength also "
+			+ "grants +1% defense. Healing potions recharge four times faster, heal 50% more, and double "
 			+ "your life regeneration for 4 seconds. -15% attack speed, and attack speed cannot be "
 			+ "increased. -50% movement speed. You permanently have no mana. Dexterity and Intellect "
 			+ "grant you nothing.";
@@ -75,19 +89,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float LifeBonus = 0.50f;
 
 		/// <summary>
-		/// Strength's Juggernaut-only lines, in HP/s and defense-% per point.
+		/// Strength's Juggernaut-only defense line: +1% defense per point.
 		///
-		/// These are ADDITIVE with Strength's normal +2 max life and +0.5% melee damage — Strength does
-		/// strictly more for a Juggernaut than for anyone else. That is a real design cost knowingly
-		/// paid: the talent's stated price is that Dexterity and Intellect grant nothing, and the
-		/// breadth gate forces ~50 attribute points regardless, so this hands the already-forced
-		/// Strength investment a payoff and blunts that price. It was taken anyway because the model
-		/// says Juggernaut STILL finishes last on sustain afterwards (46.7 HP/s vs 144 and 111), so
-		/// the cost being blunted does not make the pick strong — it makes it viable.
+		/// ADDITIVE with Strength's normal +2 max life and +0.5% melee damage — Strength does strictly
+		/// more for a Juggernaut than for anyone else. That is a real design cost knowingly paid: the
+		/// talent's price is that Dexterity and Intellect grant nothing and the breadth gate forces ~50
+		/// attribute points regardless, so this hands the already-forced Strength investment a payoff.
+		/// It is the only defense that separates this talent from the other two.
 		///
-		/// At a realistic 40 Strength: +40 HP/s and +40% defense. Both untested first guesses.
+		/// The old +1 HP/s-per-point regen that sat here was removed on 2026-07-20 — it was flat and
+		/// could not scale with world level; Resolve's proportional regen replaces it. At a realistic
+		/// 40 Strength this is +40% defense. Untested first guess.
 		/// </summary>
-		private const float RegenPerStrength = 1.0f;
 		private const float DefensePercentPerStrength = 0.01f;
 
 		/// <summary>
@@ -108,15 +121,47 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// A drunk potion also doubles life regeneration, decaying linearly to nothing over 4 seconds.
 		///
 		/// This is an "increased" bonus and means it: it multiplies whatever regen you already have, so
-		/// it is worth ~nothing at 0 Strength and ~+40 HP/s at 40, and it is worth exactly zero while a
-		/// DoT is holding lifeRegen at or below zero. That is the intended reading — it makes the potion
-		/// and the Strength regen multiply rather than merely add, and it does not rescue the DoT
-		/// matchup that the direct heal is there to answer.
+		/// it is worth ~nothing while you have no Resolve and most while dug in, and it is worth exactly
+		/// zero while a DoT is holding lifeRegen at or below zero. That is the intended reading — it makes
+		/// the potion and the Resolve regen multiply rather than merely add, and it does not rescue the
+		/// DoT matchup that the direct heal is there to answer.
 		/// </summary>
 		private const float PotionRegenBonus = 1.00f;
 		private const int PotionRegenDurationTicks = 240;
 
 		private int potionRegenTicks;
+
+		/// <summary>
+		/// Resolve ramp, 0..1, driven by the sliding damage window below. Scales both the damage
+		/// reduction and the regen together. Exposed for the HUD readout; never cache the instance
+		/// (TalentPlayer recreates behaviours on pick changes). Recomputed every frame from the window,
+		/// so it can never drift from the payoff it drives.
+		/// </summary>
+		private float resolve;
+		public float Resolve => resolve;
+		public float DamageReduction => ResolveEndurance * resolve;
+
+		/// <summary>
+		/// Each hit taken, held for ResolveWindowSeconds then dropped — the sliding window that drives
+		/// Resolve. Same shape as VengeanceTalent's list; Juggernaut owns its own DamageEntry copy
+		/// (behaviours are not shared). Records POST-mitigation damage (info.Damage), which is what makes
+		/// Resolve self-stabilising rather than a spiral.
+		/// </summary>
+		private readonly List<DamageEntry> recentHits = new List<DamageEntry>();
+
+		/// <summary>
+		/// Resolve tuning, all untested first guesses (see todo.md). ResolveWindowSeconds is how long each
+		/// hit keeps hardening you; ResolvePerLifeFraction sets how fast Resolve fills (1.5 → full at ~67%
+		/// of max life taken inside the window — the ramp-speed dial). At full it is worth ResolveEndurance
+		/// damage reduction (multiplicative, on top of the 50% warrior baseline = 70% total; tunable to
+		/// 0.25 = Fargo's 0.75 endurance cap) and ResolveRegenFraction of max life per second in regen.
+		/// The two ceilings are unchanged from the Entrenchment design they replace — only the driver
+		/// changed, from standing still to taking damage.
+		/// </summary>
+		private const float ResolveWindowSeconds = 10f;
+		private const float ResolvePerLifeFraction = 1.5f;
+		private const float ResolveEndurance = 0.20f;
+		private const float ResolveRegenFraction = 0.04f;
 
 		/// <summary>
 		/// The most of your maximum life any one hit is allowed to take. Untested first guess in the
@@ -145,13 +190,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			// Stagger's x2.5 and Vengeance's x0.7 penalty — see ClassBaselines. Defense is subtractive
 			// and vanilla floors damage to 1 before FinalDamage, so a pinnacle-wide defense SPREAD is
 			// a cliff, not a gradient, and it was why this talent felt fine against trash and hopeless
-			// against bosses. Mitigation now comes from ClassBaselines.WarriorEndurance, which every
-			// warrior has and which is multiplicative.
+			// against bosses. Mitigation now comes from ClassBaselines.WarriorEndurance (which every
+			// warrior has and which is multiplicative) plus this talent's own Resolve endurance.
 			//
-			// The Strength-driven defense in ApplyStrengthSustain BELOW SURVIVES, and it is now the
-			// only thing separating this talent from the other two on defense — which is the right
-			// shape: it is bought with an attribute investment the talent already forces, rather than
-			// handed over as a flat multiplier.
+			// The Strength-driven defense in ApplyStrengthDefense BELOW SURVIVES, and it is now the
+			// only thing separating this talent from the other two on subtractive defense — which is the
+			// right shape: it is bought with an attribute investment the talent already forces, rather
+			// than handed over as a flat multiplier.
 			{ "GenericDamage", DamageBonus },
 			{ "MovementSpeed", -MoveSpeedPenalty },
 		};
@@ -206,6 +251,20 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
+		/// Feed the Resolve window. info.Damage is the POST-mitigation number, so a tankier wall records
+		/// smaller hits and Resolve settles at an equilibrium instead of spiralling — the same property
+		/// that makes Vengeance's fraction-of-max ramp stable. DoTs never reach here (they bypass
+		/// Player.Hurt), so they never build Resolve; that is deliberate and mirrors the hit cap.
+		/// </summary>
+		public override void PostHurt(Player player, Player.HurtInfo info)
+		{
+			if (info.Damage <= 0)
+				return;
+
+			recentHits.Add(new DamageEntry { Damage = info.Damage, TimeRemaining = ResolveWindowSeconds });
+		}
+
+		/// <summary>
 		/// The potion cooldown. <b>This MUST be contributed from ResetEffects and nowhere else</b>, and
 		/// the reason is not style — it is a live bug in any other hook.
 		///
@@ -238,6 +297,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		{
 			if (potionRegenTicks > 0)
 				potionRegenTicks--;
+
+			// Age out the Resolve window. Same literal sliding-window as VengeanceTalent — a hit is
+			// dropped exactly ResolveWindowSeconds after it landed, not decayed proportionally.
+			if (recentHits.Count == 0)
+				return;
+
+			const float deltaTime = 1f / 60f;
+			for (int i = recentHits.Count - 1; i >= 0; i--)
+			{
+				recentHits[i].TimeRemaining -= deltaTime;
+				if (recentHits[i].TimeRemaining <= 0f)
+					recentHits.RemoveAt(i);
+			}
 		}
 
 		public override void OnPotionUsed(Player player, Item item)
@@ -245,9 +317,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			potionRegenTicks = PotionRegenDurationTicks;
 		}
 
+		public override void OnRespawn(Player player)
+		{
+			// Never carry a Resolve ramp across a life.
+			recentHits.Clear();
+			resolve = 0f;
+		}
+
 		public override void OnDeactivate(Player player)
 		{
 			potionRegenTicks = 0;
+			resolve = 0f;
+			recentHits.Clear();
 		}
 
 		public override void PostUpdateMiscEffects(Player player)
@@ -267,7 +348,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			player.statManaMax2 = 0;
 			player.statMana = 0;
 
-			ApplyStrengthLines(player);
+			ApplyResolve(player);
+			ApplyStrengthDefense(player);
 
 			// The consumables-only channel, so this cannot reach LifeLeechApplier. Juggernaut has no
 			// leech of its own, but an item can roll it, and "potions heal more" should not quietly
@@ -276,27 +358,76 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// Strength's regen and defense. Added here, in PostUpdateMiscEffects, deliberately:
+		/// Resolve — the wall's whole identity (reworked 2026-07-20). Driven by damage taken in the last
+		/// ResolveWindowSeconds, not by standing still, so it hardens you whether you are planted or
+		/// dodging and peaks exactly when you are under fire. The ramp scales BOTH payoffs together, so a
+		/// wall under heavy fire hardens AND heals, and both fade as the fire lets up.
 		///
-		/// - The regen is a FLAT ADD, and this hook runs immediately before Player.UpdateLifeRegen
-		///   (Player.cs:23190/23191) — so it lands in lifeRegen in time for vanilla's debuff block to
-		///   zero it under a DoT, exactly as it does to StatApplier's LifeRegen key and to Stagger's
-		///   flat regen. Adding it from the UpdateLifeRegen hook instead would place it AFTER that
-		///   block (PlayerLoader.cs:17305) and quietly make Juggernaut the one build whose regen
-		///   ignores Poisoned and On Fire. See the class doc: DoTs shutting this off is the design.
-		/// - The defense is a DefensePercent-shaped multiply on a Player.DefenseStat, which tracks adds
-		///   and multiplies separately — so it is order-independent and compounds with Ironhide and
-		///   this talent's own x1.5 rather than summing into them. tML forbids touching statDefense in
-		///   PostUpdate or later; this hook is safely before that.
+		/// - <b>Damage reduction via Player.endurance</b> (multiplicative, no subtractive-defense cliff —
+		///   the whole reason defense was pulled from the pinnacles on 2026-07-17, CLAUDE.md §5b). Added
+		///   here, not in ResetEffects, because ResetEffects is where endurance is zeroed; ClassBaselines
+		///   (which runs first, alphabetically) has already added the warrior's 0.50, and this stacks on
+		///   top. Clamp to 1 to match ClassBaselines. On Fargo Eternity endurance is separately clamped
+		///   to 0.75.
+		/// - <b>Proportional life regen</b> — statLifeMax2 * fraction, the exact scaling shape as Stagger's
+		///   moving 2%/s (StaggerTalent.ApplyMovingLifeRegen). A plain unguarded ADD in
+		///   PostUpdateMiscEffects: it lands in lifeRegen before UpdateLifeRegen's DoT blocks (so a DoT
+		///   positionally zeroes it, the wall's answer key) and before Second Wind's LifeRegenPercent (so
+		///   that scales it). The * 2f is the half-HP-per-second unit. No lifeRegen > 0 guard, because it
+		///   is an add — the guard exists on multiplies. This REPLACES the old flat Strength regen.
 		/// </summary>
-		private static void ApplyStrengthLines(Player player)
+		private void ApplyResolve(Player player)
+		{
+			resolve = ComputeResolve(player);
+			if (resolve <= 0f)
+				return;
+
+			player.endurance += ResolveEndurance * resolve;
+			if (player.endurance > 1f)
+				player.endurance = 1f;
+
+			// lifeRegen is in HALF-HP per second, hence the 2. Getting this wrong halves the talent.
+			player.lifeRegen += (int)(player.statLifeMax2 * ResolveRegenFraction * resolve * 2f);
+		}
+
+		/// <summary>
+		/// Resolve as a 0..1 fraction: total damage taken in the window as a fraction of max life, times
+		/// ResolvePerLifeFraction, capped at 1. Same shape as VengeanceTalent.GetCurrentBonus, but it
+		/// feeds defense rather than offense. Guarded on statLifeMax2 for the divide.
+		/// </summary>
+		private float ComputeResolve(Player player)
+		{
+			if (player.statLifeMax2 <= 0)
+				return 0f;
+
+			float fraction = (GetRecentDamage() / player.statLifeMax2) * ResolvePerLifeFraction;
+			return fraction > 1f ? 1f : fraction;
+		}
+
+		/// <summary>Total post-mitigation damage taken inside the window — what drives Resolve.</summary>
+		private float GetRecentDamage()
+		{
+			float total = 0f;
+			for (int i = 0; i < recentHits.Count; i++)
+				total += recentHits[i].Damage;
+			return total;
+		}
+
+		/// <summary>
+		/// Strength's Juggernaut-only defense. A DefensePercent-shaped multiply on a Player.DefenseStat,
+		/// which tracks adds and multiplies separately — so it is order-independent and compounds with
+		/// Ironhide and this talent's own x1.5 rather than summing into them. tML forbids touching
+		/// statDefense in PostUpdate or later; this hook is safely before that.
+		///
+		/// The flat +1 HP/s-per-point regen that used to sit alongside this was removed on 2026-07-20 —
+		/// it was the only pinnacle sustain that could not scale with world level, and Resolve's
+		/// proportional regen replaces it.
+		/// </summary>
+		private static void ApplyStrengthDefense(Player player)
 		{
 			int strength = AttributeManager.Get(player).Get(PlayerAttribute.Strength);
 			if (strength <= 0)
 				return;
-
-			// lifeRegen is in HALF-HP per second, hence the 2. Getting this wrong halves the talent.
-			player.lifeRegen += (int)(RegenPerStrength * strength * 2f);
 
 			player.statDefense *= 1f + DefensePercentPerStrength * strength;
 		}
@@ -330,6 +461,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			speed -= AttackSpeedPenalty;
 			if (speed < 0.05f)
 				speed = 0.05f;
+		}
+
+		private class DamageEntry
+		{
+			public float Damage { get; set; }
+			public float TimeRemaining { get; set; }
 		}
 	}
 }

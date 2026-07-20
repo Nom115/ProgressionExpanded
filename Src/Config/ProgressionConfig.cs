@@ -96,6 +96,27 @@ namespace ProgressionExpanded.Src.Config
 		[DefaultValue(1.0f)]
 		public float VengeanceReadoutScale { get; set; }
 
+		/// <summary>
+		/// The Juggernaut Resolve readout. Only ever drawn while Juggernaut is picked and the ramp
+		/// is above zero, so leaving this on costs nothing on any other build.
+		/// </summary>
+		[Header("ResolveReadoutSettings")]
+		[DefaultValue(true)]
+		public bool ShowResolveReadout { get; set; }
+
+		[Range(0, 1920)]
+		[DefaultValue(20)]
+		public int ResolveReadoutX { get; set; }
+
+		[Range(0, 1080)]
+		[DefaultValue(160)]
+		public int ResolveReadoutY { get; set; }
+
+		[Range(0.5f, 2.0f)]
+		[Increment(0.1f)]
+		[DefaultValue(1.0f)]
+		public float ResolveReadoutScale { get; set; }
+
 		[Header("LevelDisplaySettings")]
 		[DefaultValue(true)]
 		public bool ShowPlayerLevels { get; set; }
