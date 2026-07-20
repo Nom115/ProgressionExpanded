@@ -137,7 +137,16 @@ namespace ProgressionExpanded.Src.UI
 			float boxW = maxWidth + padX * 2f;
 			float boxH = lineHeight * (count + 1) + padY * 2f;
 
-			var origin = new Vector2(Main.mouseX + 20f, Main.mouseY + 20f);
+			// Coordinate spaces differ here and it is the whole bug. This layer draws in
+			// InterfaceScaleType.UI, whose canvas is UI space: Main.screenWidth/Height are already in it
+			// (they are raw ÷ Main.UIScale) and boxW/boxH are too (measured from the UI-space font). But
+			// Main.mouseX/Y are RAW screen pixels — proven by FindHoveredEnemy comparing them against a
+			// world-derived rect. Using the raw cursor as a UI coordinate multiplied it by UIScale, which
+			// shoved the panel far to the lower-right and off-screen at any UIScale != 1 (the reported
+			// invisibility). Divide the cursor into UI space; leave the already-UI-space bounds alone.
+			float uiScale = Main.UIScale <= 0f ? 1f : Main.UIScale;
+
+			var origin = new Vector2(Main.mouseX / uiScale + 20f, Main.mouseY / uiScale + 20f);
 			if (origin.X + boxW > Main.screenWidth) origin.X = Main.screenWidth - boxW - 4f;
 			if (origin.Y + boxH > Main.screenHeight) origin.Y = Main.screenHeight - boxH - 4f;
 			if (origin.X < 0f) origin.X = 0f;
