@@ -13,8 +13,9 @@ namespace ProgressionExpanded.Src.UI
 {
 	/// <summary>
 	/// Live readout of the Vengeance ramp: how much damage you have taken inside the talent's window
-	/// (VengeanceTalent.WindowSeconds), and the bonus it is currently buying. Both the window and the
-	/// maxed threshold are read from the talent, never restated here — see WindowSeconds for why.
+	/// (VengeanceTalent.WindowSeconds), and the increased damage &amp; healing it is currently buying.
+	/// Both the window and the gold "maxed" threshold are read from the talent, never restated here —
+	/// see WindowSeconds for why.
 	///
 	/// Vengeance is the only talent whose payoff moves several times a second and decays on its own,
 	/// so without a number on screen the player is guessing at when to commit. Stagger surfaces its
@@ -30,7 +31,6 @@ namespace ProgressionExpanded.Src.UI
 		private static readonly Color LabelColor = new Color(255, 190, 190);
 		private static readonly Color RampColor = new Color(255, 80, 80);
 		private static readonly Color MaxedColor = new Color(255, 215, 0);
-		private static readonly Color RecoveryColor = new Color(150, 230, 160);
 
 		private ProgressionConfig Config => ModContent.GetInstance<ProgressionConfig>();
 
@@ -52,15 +52,13 @@ namespace ProgressionExpanded.Src.UI
 				return;
 
 			float bonus = vengeance.GetCurrentBonus(player);
-			float recovery = vengeance.GetRecoveryPerSecond(player);
 
 			DrawReadout(
 				spriteBatch,
 				new Vector2(Config.VengeanceReadoutX, Main.screenHeight - Config.VengeanceReadoutY),
 				Config.VengeanceReadoutScale,
 				damage,
-				bonus,
-				recovery);
+				bonus);
 
 			base.Draw(spriteBatch);
 		}
@@ -80,26 +78,21 @@ namespace ProgressionExpanded.Src.UI
 			return null;
 		}
 
-		private void DrawReadout(SpriteBatch spriteBatch, Vector2 position, float scale, float damage, float bonus, float recovery)
+		private void DrawReadout(SpriteBatch spriteBatch, Vector2 position, float scale, float damage, float bonus)
 		{
 			DynamicSpriteFont font = FontAssets.MouseText.Value;
 
-			// Gold once the bonus is pinned at its ceiling — that is the moment the player is paying
-			// for the ramp (still taking damage) without getting any more out of it.
+			// Gold once the bonus passes MaxRampBonus — a display-only "you're really cooking" threshold
+			// now that the ramp is uncapped (see VengeanceTalent.MaxRampBonus), not a functional ceiling.
 			bool maxed = bonus >= VengeanceTalent.MaxRampBonus;
 
 			string bonusText = $"Vengeance +{(int)(bonus * 100f)}% damage & healing";
 			string damageText = $"{(int)damage} damage taken ({VengeanceTalent.WindowSeconds:0.#}s)";
-			// Vengeful Recovery — a real heal (like leech). Grows against a harder-hitting boss on two
-			// counts: the absolute damage above, and the recovery SHARE itself, which climbs from 20% up
-			// to 50% the harder you are being chunked.
-			string recoveryText = $"+{(int)recovery} HP/s recovered";
 
 			float lineHeight = font.MeasureString(bonusText).Y * scale;
 
 			Terraria.Utils.DrawBorderString(spriteBatch, bonusText, position, maxed ? MaxedColor : RampColor, scale);
 			Terraria.Utils.DrawBorderString(spriteBatch, damageText, position + new Vector2(0f, lineHeight), LabelColor, scale);
-			Terraria.Utils.DrawBorderString(spriteBatch, recoveryText, position + new Vector2(0f, lineHeight * 2f), RecoveryColor, scale);
 		}
 	}
 
