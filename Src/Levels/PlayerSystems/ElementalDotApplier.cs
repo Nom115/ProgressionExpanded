@@ -65,8 +65,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 				var element = (DamageElement)e;
 
-				// Penetration is 0 until Phase 3 gives items a way to roll it.
-				float resistance = ElementalResistance.Get(target, element, penetration: 0f);
+				// Penetration lowers the target's resistance to this element. It is a genuinely
+				// separate stat from vanilla ArmorPenetration (which already reached us through
+				// damageDone), so wiring it here is not the double-dip ElementalResistance.Get warns
+				// about. The pool is whole percents; Get wants a fraction. ElementalPenetration[Bleed]
+				// is always 0 (no Bleed-penetration mods are authored), so Bleed faces armour untouched.
+				float penetration = effects.ElementalPenetration[e] / 100f;
+				float resistance = ElementalResistance.Get(target, element, penetration);
 
 				// damageDone, not hit.Damage: post-defense and post-crit, so the DoT inherits every
 				// bonus that shaped the hit without re-applying any of them. It is also clamped to
@@ -83,9 +88,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 				// Icon only — we deal the damage ourselves. This silently no-ops on an enemy that is
 				// buffImmune to the carrier, which costs us the icon but not the DoT: the instance
-				// above lives in our own GlobalNPC. Phase 2 turns buffImmune into a resistance
-				// source, so such an enemy will take reduced (never zero) elemental damage while
-				// showing no icon for it.
+				// above lives in our own GlobalNPC. Resistance is a per-enemy rolled property (see
+				// ElementalResistance), independent of buffImmune, so a buff-immune enemy still takes
+				// the resisted-but-never-zero elemental damage while simply showing no icon for it.
 				target.AddBuff(DamageElementInfo.BuffIdFor(element), buffTicks);
 			}
 		}

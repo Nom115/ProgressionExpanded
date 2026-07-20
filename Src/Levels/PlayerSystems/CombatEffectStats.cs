@@ -77,6 +77,24 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// </summary>
 		public readonly float[] ElementalConversion = new float[DamageElementInfo.Count];
 
+		/// <summary>
+		/// Percent of each element's resistance this player ignores, indexed by <c>(int)DamageElement</c>.
+		/// Rolled onto weapons/accessories (Phase 3) and consumed once, by <see cref="ElementalDotApplier"/>,
+		/// which passes it as the <c>penetration</c> argument to <c>ElementalResistance.Get</c>.
+		///
+		/// <b>This is a NEW stat, deliberately separate from vanilla ArmorPenetration.</b> Armour pen
+		/// already flows into <c>damageDone</c> via <c>NPC.HitModifiers.ArmorPenetration</c>, so routing
+		/// it here as well would count it twice (the Vengeance-style double-dip the resistance class warns
+		/// about). Nothing here ever touches <c>player.GetArmorPenetration</c>.
+		///
+		/// <c>ElementalPenetration[Bleed]</c> stays 0 in practice — no Bleed-penetration modifiers are
+		/// authored, so Bleed continues to face armour alone.
+		///
+		/// Whole percents (a 15 here is 15 resistance points); the consumer divides by 100 because
+		/// resistance is a fraction. Cleared, not reallocated, for the same reason as the pool above.
+		/// </summary>
+		public readonly float[] ElementalPenetration = new float[DamageElementInfo.Count];
+
 		public override void ResetEffects()
 		{
 			LifeLeechPercent = 0f;
@@ -85,6 +103,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 			AilmentPercent = 0f;
 			AreaPercent = 0f;
 			Array.Clear(ElementalConversion, 0, ElementalConversion.Length);
+			Array.Clear(ElementalPenetration, 0, ElementalPenetration.Length);
 		}
 
 		/// <summary>Convenience accessor for the item applier / notables.</summary>

@@ -117,6 +117,19 @@ namespace ProgressionExpanded.Src.Config
 		[DefaultValue(1.0f)]
 		public float ResolveReadoutScale { get; set; }
 
+		/// <summary>
+		/// The enemy resistance hover panel. Follows the cursor, so it needs no X/Y — only a toggle and
+		/// a scale. Drawn only while hovering a hostile NPC; costs nothing otherwise.
+		/// </summary>
+		[Header("EnemyResistPanelSettings")]
+		[DefaultValue(true)]
+		public bool ShowEnemyResistPanel { get; set; }
+
+		[Range(0.5f, 2.0f)]
+		[Increment(0.1f)]
+		[DefaultValue(1.0f)]
+		public float EnemyResistPanelScale { get; set; }
+
 		[Header("LevelDisplaySettings")]
 		[DefaultValue(true)]
 		public bool ShowPlayerLevels { get; set; }

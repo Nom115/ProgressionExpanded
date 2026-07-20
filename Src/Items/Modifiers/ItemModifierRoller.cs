@@ -93,15 +93,39 @@ namespace ProgressionExpanded.Items.Modifiers
 			if (pool == null || count <= 0)
 				return result;
 
-			var available = excludeModIds == null || excludeModIds.Count == 0
-				? new List<ItemModifierDefinition>(pool.Modifiers)
-				: pool.Modifiers.Where(m => !excludeModIds.Contains(m.ModId)).ToList();
+			bool excluding = excludeModIds != null && excludeModIds.Count > 0;
+
+			var available = excluding
+				? pool.Modifiers.Where(m => !excludeModIds.Contains(m.ModId)).ToList()
+				: new List<ItemModifierDefinition>(pool.Modifiers);
+
+			// Group mutual-exclusion: at most one member of a non-empty Group may land on an item. Seed
+			// the used-groups set from the item's existing mods (the augment path passes them in via
+			// excludeModIds) so a second conversion/penetration is never added next to one already there.
+			var usedGroups = new HashSet<string>();
+			if (excluding)
+			{
+				foreach (var m in pool.Modifiers)
+				{
+					if (!string.IsNullOrEmpty(m.Group) && excludeModIds.Contains(m.ModId))
+						usedGroups.Add(m.Group);
+				}
+				if (usedGroups.Count > 0)
+					available.RemoveAll(m => !string.IsNullOrEmpty(m.Group) && usedGroups.Contains(m.Group));
+			}
 
 			for (int i = 0; i < count && available.Count > 0; i++)
 			{
 				var selected = WeightedPick(available, d => Math.Max(1, d.Weight));
 				if (selected == null) break;
 				available.Remove(selected);
+
+				// Claim the picked mod's group so no sibling can also roll onto this item.
+				if (!string.IsNullOrEmpty(selected.Group))
+				{
+					usedGroups.Add(selected.Group);
+					available.RemoveAll(m => m.Group == selected.Group);
+				}
 
 				var eligible = selected.GetEligibleTiers(itemLevel);
 				if (eligible.Count == 0)

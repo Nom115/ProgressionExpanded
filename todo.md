@@ -811,11 +811,15 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
 - [ ] **Play-test all of it. Zero Build+Reload.** `RollMean` (0.15), `RollHalfWidth` (0.25),
       `WardResistance` (0.40) are first guesses, as are the **pre-existing** `ConversionPerTier`
       (2%/rank), `BaseDurationSeconds` (4s), `MaxInstancesPerElement` (20) and Plaguebearer's
-      3%/element — **none of which have ever been tracked or tested either.**
-- [ ] ⚠️ **The roll is INVISIBLE until Phase 4.** Wards announce themselves in the enemy's name; a +0.40
-      fire roll does not, so it reads as Immolation randomly underperforming with no counterplay.
-      `RollHalfWidth` is deliberately moderate for this reason. **Most likely source of "this feels bad".
-      Consider pulling Phase 4 (the hover panel) forward before widening the roll.**
+      3%/element — **none of which have ever been tracked or tested either.** **New in Phase 3/4
+      (2026-07-20), also untested:** the item conversion tier ladder (2–12% over RWL 1→88), the
+      penetration ladder (4–30%), and the panel `ColorFor` colours.
+- [x] ✅ **The roll is legible now — Phase 4 shipped (2026-07-20).** `Src/UI/EnemyResistPanel.cs` draws
+      the hovered enemy's per-element resistance. This retires the "Immolation randomly underperforms
+      with no counterplay" risk and closes the slot-3+ boss-ward gap (the panel shows the number the
+      name omits). **`RollHalfWidth` can now be widened** — it was kept at 0.25 only until the panel
+      existed. ⚠️ Reading a resistance rolls the enemy's seed on first hover (`Main.rand`, SP-harmless,
+      documented in the panel).
 - [ ] ⚠️ **Wards are invisible on ~43% of bosses — found in review, not fixed.**
       `EnemyModifierSystem.GenerateDisplayName:115` renders at most the **first two** modifier prefixes:
       `prefix = modifiers[0]; if (count > 1) prefix = $"{modifiers[0]} {modifiers[1]}"`. Trash is fine
@@ -846,10 +850,14 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
       `MinResistance` floors at −0.10. Neither binds until Phase 3's penetration. For Bleed,
       `MaxResistance` binds only at `def ≥ 450` — Dungeon Guardian alone. **Don't mistake the clamp for
       a balancing lever.**
-- [ ] ⚠️ **Phase 3: `ArmorPenetration` must NEVER feed `penetration`.** It already flows into
-      `damageDone` via `HitModifiers.ArmorPenetration`, so wiring it in is the **Vengeance ×4 double-dip**
-      (§1a) exactly. Penetration must be a *new, separate* elemental-penetration stat. Also undecided:
-      **should penetration apply to Bleed at all?** The current shape subtracts it uniformly.
+- [x] ✅ **Phase 3 shipped (2026-07-20): item conversion + a genuinely separate penetration stat.**
+      Penetration writes only to the new `CombatEffectStats.ElementalPenetration[]` pool, never
+      `player.GetArmorPenetration`, so the Vengeance ×4 double-dip is structurally avoided (not just
+      remembered). Rolls on **weapons + accessories** (not armor); **one conversion + one penetration
+      max per item** via the new `ItemModifierDefinition.Group` exclusion in the roller. **Bleed
+      penetration was decided OUT** — no `PenetrationBleed` mod is authored, so Bleed keeps facing
+      armour alone; `ElementalResistance.cs` still subtracts penetration in its Bleed branch but the
+      pool is always 0 there, so no code change was needed. Untested in play.
 - [ ] **Mod-dealt AoE still does not convert** (pre-existing, `CLAUDE.md` §10): `ModPlayer.OnHitNPC` is
       dispatched only from `Player.StrikeNPCDirect`, so Detonate/Hellfire/Corrupted Blood never apply DoT.
 - [ ] **New §7 bug found while doing this (not fixed):** the mod's rarity/Tough/level defense multipliers

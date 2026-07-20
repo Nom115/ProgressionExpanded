@@ -829,6 +829,420 @@
           "Weight": 40
         }
       ]
+    },
+    {
+      "ModId": "conversion_fire",
+      "DisplayName": "{value}% of Damage dealt as Fire",
+      "Keyword": "flat",
+      "StatKey": "ConversionFire",
+      "Group": "elemental_conversion",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 2,
+          "MaxValue": 3,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 3,
+          "MaxValue": 4,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 8,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 8,
+          "MaxValue": 10,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 10,
+          "MaxValue": 12,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "conversion_cold",
+      "DisplayName": "{value}% of Damage dealt as Cold",
+      "Keyword": "flat",
+      "StatKey": "ConversionCold",
+      "Group": "elemental_conversion",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 2,
+          "MaxValue": 3,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 3,
+          "MaxValue": 4,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 8,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 8,
+          "MaxValue": 10,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 10,
+          "MaxValue": 12,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "conversion_lightning",
+      "DisplayName": "{value}% of Damage dealt as Lightning",
+      "Keyword": "flat",
+      "StatKey": "ConversionLightning",
+      "Group": "elemental_conversion",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 2,
+          "MaxValue": 3,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 3,
+          "MaxValue": 4,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 8,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 8,
+          "MaxValue": 10,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 10,
+          "MaxValue": 12,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "conversion_poison",
+      "DisplayName": "{value}% of Damage dealt as Poison",
+      "Keyword": "flat",
+      "StatKey": "ConversionPoison",
+      "Group": "elemental_conversion",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 2,
+          "MaxValue": 3,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 3,
+          "MaxValue": 4,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 8,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 8,
+          "MaxValue": 10,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 10,
+          "MaxValue": 12,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "conversion_bleed",
+      "DisplayName": "{value}% of Damage dealt as Bleed",
+      "Keyword": "flat",
+      "StatKey": "ConversionBleed",
+      "Group": "elemental_conversion",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 2,
+          "MaxValue": 3,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 3,
+          "MaxValue": 4,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 8,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 8,
+          "MaxValue": 10,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 10,
+          "MaxValue": 12,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "penetration_fire",
+      "DisplayName": "{value}% Fire Penetration",
+      "Keyword": "flat",
+      "StatKey": "PenetrationFire",
+      "Group": "elemental_penetration",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 9,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 9,
+          "MaxValue": 13,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 13,
+          "MaxValue": 18,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 18,
+          "MaxValue": 24,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 24,
+          "MaxValue": 30,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "penetration_cold",
+      "DisplayName": "{value}% Cold Penetration",
+      "Keyword": "flat",
+      "StatKey": "PenetrationCold",
+      "Group": "elemental_penetration",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 9,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 9,
+          "MaxValue": 13,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 13,
+          "MaxValue": 18,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 18,
+          "MaxValue": 24,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 24,
+          "MaxValue": 30,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "penetration_lightning",
+      "DisplayName": "{value}% Lightning Penetration",
+      "Keyword": "flat",
+      "StatKey": "PenetrationLightning",
+      "Group": "elemental_penetration",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 9,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 9,
+          "MaxValue": 13,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 13,
+          "MaxValue": 18,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 18,
+          "MaxValue": 24,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 24,
+          "MaxValue": 30,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
+    },
+    {
+      "ModId": "penetration_poison",
+      "DisplayName": "{value}% Poison Penetration",
+      "Keyword": "flat",
+      "StatKey": "PenetrationPoison",
+      "Group": "elemental_penetration",
+      "Weight": 40,
+      "Tiers": [
+        {
+          "MinValue": 4,
+          "MaxValue": 6,
+          "RequiredWorldLevel": 1,
+          "Weight": 70
+        },
+        {
+          "MinValue": 6,
+          "MaxValue": 9,
+          "RequiredWorldLevel": 15,
+          "Weight": 54
+        },
+        {
+          "MinValue": 9,
+          "MaxValue": 13,
+          "RequiredWorldLevel": 30,
+          "Weight": 40
+        },
+        {
+          "MinValue": 13,
+          "MaxValue": 18,
+          "RequiredWorldLevel": 50,
+          "Weight": 28
+        },
+        {
+          "MinValue": 18,
+          "MaxValue": 24,
+          "RequiredWorldLevel": 70,
+          "Weight": 16
+        },
+        {
+          "MinValue": 24,
+          "MaxValue": 30,
+          "RequiredWorldLevel": 88,
+          "Weight": 8
+        }
+      ]
     }
   ]
 }

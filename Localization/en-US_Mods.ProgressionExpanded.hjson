@@ -61,6 +61,7 @@ Configs: {
 			ManaBarSettings: Mana Bar Settings
 			VengeanceReadoutSettings: Vengeance Readout Settings
 			ResolveReadoutSettings: Resolve Readout Settings
+			EnemyResistPanelSettings: Enemy Resist Panel Settings Header
 		}
 
 		ShowXPBar: {
@@ -186,6 +187,16 @@ Configs: {
 		ResolveReadoutScale: {
 			Label: Resolve Readout Scale
 			Tooltip: Size multiplier for the Resolve readout
+		}
+
+		ShowEnemyResistPanel: {
+			Label: Show Enemy Resist Panel
+			Tooltip: ""
+		}
+
+		EnemyResistPanelScale: {
+			Label: Enemy Resist Panel Scale
+			Tooltip: ""
 		}
 	}
 }

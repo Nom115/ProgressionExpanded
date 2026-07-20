@@ -44,6 +44,13 @@ namespace ProgressionExpanded.Items.Modifiers
 		/// <summary>Which stat this affects — reuses the passive-tree stat key set (+ "ArmorIncrease").</summary>
 		public string StatKey { get; set; }
 
+		/// <summary>
+		/// Optional mutual-exclusion group. At most one modifier of a given non-empty group can roll
+		/// onto a single item (the roller drops the whole group once one member is picked). Used to keep
+		/// an item to one elemental conversion and one penetration mod at a time. Empty/null = no group.
+		/// </summary>
+		public string Group { get; set; }
+
 		/// <summary>Weighted-selection weight when rolling which mods land on an item.</summary>
 		public int Weight { get; set; } = 100;
 

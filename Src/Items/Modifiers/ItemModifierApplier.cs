@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Terraria;
 using Terraria.ModLoader;
 using ProgressionExpanded.Src.Levels.PlayerSystems;
+using ProgressionExpanded.Src.NPCs.Enemy.Elemental;
 
 namespace ProgressionExpanded.Items.Modifiers
 {
@@ -113,6 +114,14 @@ namespace ProgressionExpanded.Items.Modifiers
 					case "AreaEffect":
 						CombatEffectStats.Get(player).AreaPercent += mod.Value;
 						break;
+
+					// Elemental conversion / penetration ("ConversionFire", "PenetrationCold", …).
+					// A weapon's conversion must only count while that weapon is held, which is exactly
+					// what this hook is — so weapon-rolled elemental stats live here, not in the
+					// player-wide switch. Unrecognised keys fall through harmlessly.
+					default:
+						TryApplyElementalStat(player, mod.StatKey, mod.Value);
+						break;
 				}
 			}
 		}
@@ -222,8 +231,34 @@ namespace ProgressionExpanded.Items.Modifiers
 					CombatEffectStats.Get(player).AreaPercent += value;
 					break;
 
-				// Unknown keys are silently ignored (same policy as the passive tree).
+				// Elemental conversion / penetration reach here from an accessory (armor/accessory
+				// route through ApplyEquipMods' default → here). Weapons are handled in
+				// ApplyHeldWeaponStats. Truly unknown keys are silently ignored, as before.
+				default:
+					TryApplyElementalStat(player, key, value);
+					break;
 			}
+		}
+
+		/// <summary>
+		/// Contribute an elemental-conversion or -penetration stat key to the shared
+		/// <see cref="CombatEffectStats"/> pools. Returns false (and does nothing) for any key that is
+		/// not one of the elemental families, so both dispatch switches can call it from their default
+		/// arm without disturbing their existing "unknown key ignored" behaviour.
+		///
+		/// Value is a whole percent, matching how the pools store conversion; the consumers de-scale.
+		/// </summary>
+		private static bool TryApplyElementalStat(Player player, string key, float value)
+		{
+			if (!DamageElementInfo.TryParseItemStatKey(key, out DamageElement element, out bool isPenetration))
+				return false;
+
+			CombatEffectStats effects = CombatEffectStats.Get(player);
+			if (isPenetration)
+				effects.ElementalPenetration[(int)element] += value;
+			else
+				effects.ElementalConversion[(int)element] += value;
+			return true;
 		}
 
 		private static void ApplyDamage(Player player, DamageClass dc, string kw, float value)
