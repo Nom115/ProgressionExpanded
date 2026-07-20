@@ -60,8 +60,13 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Corruption
 					int damage = npc.damage / 3; // Reduced damage for projectile
 					int projectileType = ProjectileID.VilethornBase; // Corruption projectile
 
-					Projectile.NewProjectile(npc.GetSource_FromThis(), npc.Center, velocity, 
-						projectileType, damage, 1f, Main.myPlayer);
+					// Spawn as a HOSTILE projectile (owner 255) so it can actually hurt the player.
+					// owner = Main.myPlayer made it friendly — it could never damage the player. Setting
+					// hostile = true also lets HostileProjectileScaling apply enemy-level damage scaling.
+					Projectile proj = Projectile.NewProjectileDirect(npc.GetSource_FromThis(), npc.Center, velocity,
+						projectileType, damage, 1f, Main.maxPlayers);
+					proj.hostile = true;
+					proj.friendly = false;
 				}
 			}
 		}

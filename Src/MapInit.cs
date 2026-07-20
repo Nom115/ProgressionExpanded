@@ -107,7 +107,9 @@ private void SetInitialWorldData()
 {
 WorldDataManager.SetBool("initialized", true);
 WorldDataManager.SetInt("worldVersion", 1);
-WorldDataManager.SetInt("worldCreationTime", (int)System.DateTime.UtcNow.Ticks);
+// DateTime.Ticks is a long (~10^18) and overflows int — store it as a string; the world data
+// store has no long channel. Read back via long.TryParse in GetWorldAge.
+WorldDataManager.SetString("worldCreationTime", System.DateTime.UtcNow.Ticks.ToString());
 
 // Add any other initial world state here
 WorldDataManager.SetInt("bossesDefeated", 0);
@@ -185,8 +187,14 @@ if (!WorldDataManager.HasKey("worldCreationTime"))
 return -1;
 }
 
-long creationTime = WorldDataManager.GetInt("worldCreationTime", 0);
-long currentTime = (int)System.DateTime.UtcNow.Ticks;
+// worldCreationTime is stored as DateTime.Ticks (a long) in string form — the world data store
+// has no long channel and Ticks overflows int. Parse it back; a legacy truncated-int value that
+// no longer parses as a full long is treated as "unknown".
+if (!long.TryParse(WorldDataManager.GetString("worldCreationTime", string.Empty), out long creationTime))
+{
+return -1;
+}
+long currentTime = System.DateTime.UtcNow.Ticks;
 return (currentTime - creationTime) / 10000000; // Convert to seconds
 }
 }

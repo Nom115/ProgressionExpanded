@@ -13,7 +13,10 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 		{
 			// Increase defense by 50%
 			npc.defense = (int)(npc.defense * 1.5f);
-			
+			// Sync defDefense so aiStyles that reset defense = defDefense each frame (Skeletron, EoC,
+			// Golem, Prime) don't wipe this. See NPCLevelManager.ApplyLevelScaling.
+			npc.defDefense = npc.defense;
+
 			// Increase knockback resistance
 			npc.knockBackResist *= 0.5f;
 		}

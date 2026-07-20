@@ -101,6 +101,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 
 				// Increase defense slightly
 				npc.defense = (int)(npc.defense * (1.0f + (rarityInfo.StatMultiplier - 1.0f) * 0.5f));
+				// Keep the armor snapshot in sync so aiStyles that reset defense = defDefense each frame
+				// (Skeletron, EoC, Golem, Prime) don't wipe this bonus. See NPCLevelManager.ApplyLevelScaling.
+				npc.defDefense = npc.defense;
 			}
 		}
 
@@ -249,7 +252,17 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			var toGlobal = (EnemyModifierSystem)base.Clone(from, to);
 
 			toGlobal.rarity = fromGlobal.rarity;
-			toGlobal.modifiers = new List<IModifier>(fromGlobal.modifiers);
+			// Deep-copy the modifier list. A shallow copy (new List of the same references) shares the
+			// IModifier instances, so a split NPC (e.g. a worm) and its clone would share stateful
+			// affixes such as VileSpitModifier.shootTimer and cross-talk. Reconstruct each modifier by
+			// type: its one-time stat changes (defense, etc.) are already baked into the cloned NPC, so
+			// only fresh per-frame state is needed. Stateless affixes (the elemental wards) are
+			// unaffected either way.
+			toGlobal.modifiers = new List<IModifier>(fromGlobal.modifiers.Count);
+			foreach (var modifier in fromGlobal.modifiers)
+			{
+				toGlobal.modifiers.Add((IModifier)System.Activator.CreateInstance(modifier.GetType()));
+			}
 			toGlobal.modifiersInitialized = fromGlobal.modifiersInitialized;
 			toGlobal.displayName = fromGlobal.displayName;
 

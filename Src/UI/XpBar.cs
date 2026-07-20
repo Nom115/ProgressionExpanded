@@ -107,8 +107,9 @@ namespace ProgressionExpanded.Src.UI
 				position.Y + (barHeight - levelTextSize.Y) / 2
 			);
 			
-			// XP text (center of bar)
-			string xpText = $"{currentXP} / {requiredXP}";
+			// XP text (center of bar) — at the level cap GetXPRequiredForLevel returns int.MaxValue,
+			// so show "MAX" instead of "<xp> / 2147483647".
+			string xpText = level >= PlayerLevelManager.GetMaxLevel() ? "MAX" : $"{currentXP} / {requiredXP}";
 			Vector2 xpTextSize = font.MeasureString(xpText) * scale;
 			Vector2 xpTextPos = new Vector2(
 				position.X + (barWidth - xpTextSize.X) / 2,

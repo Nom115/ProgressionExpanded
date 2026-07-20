@@ -243,9 +243,23 @@ namespace ProgressionExpanded.Src.NPCs
 			int levelOffset = LevelOffset();
 
 			// Health scales with the offset (5% per level of deviation from the world baseline).
+			// Preserve the current health fraction rather than healing to full: this scaling can run
+			// lazily from ModifyHitBy* the first time the player strikes an NPC that was not scaled at
+			// spawn (transformed/converted enemies), and healing a partially-damaged enemy to full on
+			// first hit is a bug. At spawn the NPC is already at full, so it stays full.
+			int oldLifeMax = npc.lifeMax;
+			bool wasFullHealth = npc.life >= oldLifeMax;
 			float levelHealthMultiplier = 1.0f + (levelOffset * HEALTH_PER_LEVEL_OFFSET);
 			npc.lifeMax = (int)(npc.lifeMax * healthMultiplier * levelHealthMultiplier);
-			npc.life = npc.lifeMax;
+			if (wasFullHealth)
+			{
+				npc.life = npc.lifeMax;
+			}
+			else
+			{
+				int damageTaken = oldLifeMax - npc.life;
+				npc.life = System.Math.Max(1, npc.lifeMax - damageTaken);
+			}
 
 			// Damage takes the world multiplier and NOTHING else.
 			//
@@ -259,6 +273,13 @@ namespace ProgressionExpanded.Src.NPCs
 			// Defense scales with the offset (2% per level of deviation).
 			float levelDefenseMultiplier = 1.0f + (levelOffset * DEFENSE_PER_LEVEL_OFFSET);
 			npc.defense = (int)(npc.defense * levelDefenseMultiplier);
+			// Mirror onto defDefense: several aiStyles (Skeletron, EoC, Golem, Prime) reset
+			// defense = defDefense every frame, which would otherwise wipe this bonus. Vanilla snapshots
+			// defDefense == defense at the end of SetDefaults, before our OnSpawn multipliers run, so
+			// re-syncing here keeps the scaled value across those per-frame resets. Because every site
+			// that touches npc.defense re-reads it live and re-syncs, the two stay equal regardless of
+			// the order our GlobalNPCs' OnSpawn hooks run in.
+			npc.defDefense = npc.defense;
 		}
 
 		/// <summary>

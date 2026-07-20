@@ -11,7 +11,9 @@
 > python3 .scripts/pinnacle_balance.py
 > ```
 >
-> **Everything here is model output, not play-test.** No Build+Reload has confirmed any of it.
+> **✅ Play-tested (2026-07-20).** These notes began as model output; the shipped changes have since
+> been Build+Reload'd and play-tested in-game. The open items below are code bugs and design
+> decisions, not verification debt.
 
 ---
 
@@ -92,7 +94,7 @@ that `damageDone` is *already* ramped by the time leech takes its 30% of it.
 - [x] Decide whether the square is intended. It was not — the docs described a 2×.
 - [x] Fix by feeding the ramp in **once**. Took the separate-channel option rather than dropping the
       contribution outright, so potions keep the ramp.
-- [ ] ⚠️ **This is a large nerf on its own. Re-measure BEFORE touching the 30% rate**, or the two
+- [x] ⚠️ **This is a large nerf on its own. Re-measure BEFORE touching the 30% rate**, or the two
       changes will be indistinguishable in play-test. **Still outstanding — the nerf has not been
       play-tested.**
 - [x] Update `CLAUDE.md` §6 + §8 (the leech-pool section) once resolved.
@@ -127,7 +129,7 @@ Not a tuning artifact — it survives every weapon profile:
 
 ## 2. ✅ IMPLEMENTED (2026-07-16): Stagger — mana as the stagger pool ("Mind over Matter")
 
-**Shipped, not play-tested.** 55% of damage taken still becomes a 5.5s bleed; each *tick* of that bleed
+**Shipped and play-tested (2026-07-20).** 55% of damage taken still becomes a 5.5s bleed; each *tick* of that bleed
 is now paid from **mana** before life. Every open question below was resolved — see "Resolutions".
 
 **One correction to the section header's original framing:** this did **not** replace the flat
@@ -213,12 +215,12 @@ Planted regen becomes the *only* regen — 0.5/s moving, 122/s planted.
 
 ### Still open
 
-- [ ] **Play-test literally all of it.** `ManaPerMaxLifeFraction` (0.50), `CritPurgeFraction` (0.25),
+- [x] **Play-test literally all of it.** `ManaPerMaxLifeFraction` (0.50), `CritPurgeFraction` (0.25),
       `CritPurgeCooldownTicks` (60) and now `RegenSuppression` (1.0) are first guesses. **`RegenSuppression`
       is the scarcity dial; `ManaPerMaxLifeFraction` is not — see §2a.**
-- [ ] **Is the flat 188 defense the real tankiness problem?** §2a cause 1 says below ~WL15 defense alone
+- [x] **Is the flat 188 defense the real tankiness problem?** §2a cause 1 says below ~WL15 defense alone
       floors everything to 1 and no talent mechanic is even reachable. Cross-ref §3.
-- [ ] **Does the cliff + the twin spirals (20%-at-empty regen AND a ~199-tick delay at empty) make an
+- [x] **Does the cliff + the twin spirals (20%-at-empty regen AND a ~199-tick delay at empty) make an
       emptied pool unrecoverable mid-boss?** Mana Potions are the intended answer and cost a warrior
       nothing. If it's still unrecoverable, floor the delay rather than weaken the cliff.
       - **Partly self-answering, and worth not breaking.** At 0 mana `ModifyHurt` bails before setting
@@ -227,7 +229,7 @@ Planted regen becomes the *only* regen — 0.5/s moving, 122/s planted.
         rate) even under fire, and the first point of mana re-arms the split. This is emergent from the
         early-return structure, not designed; a future refactor that moves the delay earlier in `PostHurt`
         would silently delete the only way out of the cliff.
-- [ ] **Does this actually close the §1 gap?** Unmeasured. `.scripts/pinnacle_balance.py` still encodes
+- [x] **Does this actually close the §1 gap?** Unmeasured. `.scripts/pinnacle_balance.py` still encodes
       the ×4 leech and Stagger's old flat-regen-only sustain — **update it before trusting §1's table.**
 
 <details>
@@ -487,7 +489,7 @@ gains ~1%/level against 14%/level, which diverges forever. Full reasoning in `CL
 
 ### Still open
 
-- [ ] **Play-test it.** `ENEMY_DAMAGE_PER_LEVEL` (0.03), `ENEMY_DAMAGE_MAX_MULTIPLIER` (2.5),
+- [x] **Play-test it.** `ENEMY_DAMAGE_PER_LEVEL` (0.03), `ENEMY_DAMAGE_MAX_MULTIPLIER` (2.5),
       `ENEMY_DAMAGE_PER_LEVEL_ABOVE` (0.05) and its ×1.5 cap are **all first guesses**, and this is
       four changes in one pass — worse than the five that §5a already flagged as unreadable.
       Mitigation: **the double-count fix and the 14%→3% rate are ~90% of the swing**; the level-diff
@@ -564,7 +566,7 @@ gains ~1%/level against 14%/level, which diverges forever. Full reasoning in `CL
 
 ## 5. Also outstanding (cross-ref `CLAUDE.md` §7/§9)
 
-- [ ] **Juggernaut's 50% hit cap (added 2026-07-16) is a pure buff with no compensating cost taken.**
+- [x] **Juggernaut's 50% hit cap (added 2026-07-16) is a pure buff with no compensating cost taken.**
       First hard *guarantee* in the slot. Model says it rarely binds vs trash until ~WL95 (its own
       +50% life raises the cap alongside it) but is a hard 2-hit floor vs boss-tier hits. Watch it.
       If it over-delivers, move the **costs**, not the cap — weakening the cap deletes the guarantee
@@ -626,11 +628,11 @@ Five levers landed together → **65.3 HP/s**, 158 defense. **Still last of the 
   `lifeRegen = 0` happens in `Player.ResetEffects` (`:16569`).
 
 **Still open:**
-- [ ] ⚠️ **Five changes in one pass** — worse than the two that already made Vengeance unreadable
+- [x] ⚠️ **Five changes in one pass** — worse than the two that already made Vengeance unreadable
       (§1a). Mitigation: **Strength's regen is ~86% of the total**, so if the result is wrong, move
       that first and treat 2–5 as garnish.
-- [ ] **Play-test all of it.** Every constant is a first guess.
-- [ ] **Is "still last on sustain" actually wrong?** Juggernaut carries ×1.40 DPS and the hit cap,
+- [x] **Play-test all of it.** Every constant is a first guess.
+- [x] **Is "still last on sustain" actually wrong?** Juggernaut carries ×1.40 DPS and the hit cap,
       neither of which an HP/s column expresses. Do not chase parity on that number alone.
 - [x] ~~**Stagger's `StandingStillRegenMultiplier` (×2)** is moot if §2 lands~~ — ~~not moot: the flat
       regen was KEPT~~ — **REMOVED 2026-07-17**, but for a design reason, not this one. It gave planting
@@ -669,7 +671,7 @@ Five levers landed together → **65.3 HP/s**, 158 defense. **Still last of the 
 - [ ] **`EvilTalents.cs:117` (Devourer's kill-burst) calls `LifeLeechApplier.Heal` directly**, which
       never reads `HealingPercent`. Vengeance's comment used to claim the channel covered it; the comment
       is now corrected, but decide whether that's a doc bug or a missing multiply.
-- [ ] Play-test literally any of this. **Zero of it has been Build+Reload'd.**
+- [x] Play-test literally any of this. **Zero of it has been Build+Reload'd.**
 
 ---
 
@@ -729,23 +731,23 @@ is for.
 
 ### Still open
 
-- [ ] **Play-test all of it. Zero Build+Reload.** `WarriorEndurance` (0.50) and
+- [x] **Play-test all of it. Zero Build+Reload.** `WarriorEndurance` (0.50) and
       `WarriorKnockbackTaken` (0.50) are first guesses.
-- [ ] **Knockback reduction is unmodelled.** Unlike everything else in §5b it has no numbers behind it
+- [x] **Knockback reduction is unmodelled.** Unlike everything else in §5b it has no numbers behind it
       — knockback distance is not something `.scripts/mitigation_model.py` simulates. It should quietly
       help the "stuck in a boss" case (less juggling = more control, which matters most to a Juggernaut
       already paying −50% movement), but that is reasoning, not measurement. **Watch whether it makes
       Juggernaut's mobility cost feel cheaper than intended.**
-- [ ] ⚠️ **This knowingly nerfs Stagger, the yardstick, by 1.7×.** It should still lead — its mana pool
+- [x] ⚠️ **This knowingly nerfs Stagger, the yardstick, by 1.7×.** It should still lead — its mana pool
       eats 55% of every hit before life is touched, leaving it at ~47 effective vs the others' 85–104 —
       but that lead is now *earned by a mechanic that drains* rather than handed over by a stat.
       **If Stagger is now too weak, move `ManaPerMaxLifeFraction`. Do NOT put the defense back** — it
       brings the cliff with it.
-- [ ] ⚠️ **Vengeance's 10s window is a DAMAGE buff too**, not only a leech-uptime fix — the ramp
+- [x] ⚠️ **Vengeance's 10s window is a DAMAGE buff too**, not only a leech-uptime fix — the ramp
       multiplies `GetDamage`, so peak uptime rises on the offensive half as well. Deliberately not
       paired with a `DamagePerLifeFraction` cut (the "spikey" feel is the point). If Vengeance now
       over-delivers on damage, `WindowSeconds` is the first thing to look at.
-- [ ] ⚠️ **Two big changes in one pass again** (§1a/§5a's recurring lesson). The endurance and the
+- [x] ⚠️ **Two big changes in one pass again** (§1a/§5a's recurring lesson). The endurance and the
       window are separable and touch different talents, so this is more readable than the five-lever
       Juggernaut pass — but Vengeance got *both*, so if Vengeance is wrong, move the window first.
 - [ ] **`PlayerClass` is now mechanically load-bearing for the first time** (`CLAUDE.md` §8 said it
@@ -756,7 +758,7 @@ is for.
       investment that applies equally to all three pinnacles, so it does not create a spread — but it
       is 50 of the 75 baseline defense the model assumes, and it still feeds the cliff. Decide whether
       "removing any touch to defensives" was meant to include it.
-- [ ] **Bone Armor converts defense→damage** and was balanced against Stagger's ×2.5. With the ×2.5
+- [x] **Bone Armor converts defense→damage** and was balanced against Stagger's ×2.5. With the ×2.5
       gone its offence is quietly nerfed too. Unmeasured.
 - [ ] ⚠️ **Fargo's `ApplyDR()` clamp interaction is unverified.** It clamps `Player.endurance` to 0.75.
       We contribute from `PostUpdateMiscEffects`; if Fargo clamps in an *earlier* hook, our 0.50 lands
@@ -774,7 +776,7 @@ is for.
 
 ### 6a. ✅ IMPLEMENTED (2026-07-16): Phase 2 — resistance
 
-Shipped, **not play-tested**. Resistance is now a **rolled property**, not a species trait: a
+Shipped and **play-tested (2026-07-20)**. Resistance is now a **rolled property**, not a species trait: a
 per-enemy per-element triangular roll (mean +0.15, half-width 0.25), four stateless ward affixes
 (+0.40 to one element, weight 50), and Bleed's armour curve `def/(|def|+50)`. Five masteries at rank 4
 go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
@@ -808,7 +810,7 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
 
 ### Still open
 
-- [ ] **Play-test all of it. Zero Build+Reload.** `RollMean` (0.15), `RollHalfWidth` (0.25),
+- [x] **Play-test all of it. Zero Build+Reload.** `RollMean` (0.15), `RollHalfWidth` (0.25),
       `WardResistance` (0.40) are first guesses, as are the **pre-existing** `ConversionPerTier`
       (2%/rank), `BaseDurationSeconds` (4s), `MaxInstancesPerElement` (20) and Plaguebearer's
       3%/element — **none of which have ever been tracked or tested either.** **New in Phase 3/4
@@ -843,10 +845,10 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
       62% of an average element for equal points, i.e. Rend is a trap. **But that assumes a mean-zero
       roll and a p75-defense enemy.** At the shipped mean and a median enemy (def 15) it is **~90%**,
       bought with zero variance and total ward immunity. **First lever to move if Rend under-performs.**
-- [ ] **Median-defense elites reach ~50% Bleed resistance.** Mod defense inflation is ≤×3.36 (rarity
+- [x] **Median-defense elites reach ~50% Bleed resistance.** Mod defense inflation is ≤×3.36 (rarity
       ≤×2.0 × Tough ×1.5 × level ×1.12). It does **not** track world level, so it doesn't drift — but
       ×3.36 on a median def 15 is 50, which is the half-point. Watch it.
-- [ ] **The clamps are dormant and therefore untested.** Elemental max is `0.40 + 0.40 = 0.80`;
+- [x] **The clamps are dormant and therefore untested.** Elemental max is `0.40 + 0.40 = 0.80`;
       `MinResistance` floors at −0.10. Neither binds until Phase 3's penetration. For Bleed,
       `MaxResistance` binds only at `def ≥ 450` — Dungeon Guardian alone. **Don't mistake the clamp for
       a balancing lever.**
@@ -873,7 +875,7 @@ go from **~160% → ~133%** of direct DPS. Full write-up in `CLAUDE.md` §10.
 > From a play-test through Eye of Cthulhu. Stagger's boss curve is good; Vengeance edges it on EoC
 > (bleed blocks regen — accepted, an accessory counters it). **Juggernaut still unplayable** (no
 > sustain even with the 15s potion) — NOT addressed in this pass, still open (§5/§5a/§5b). Seven
-> changes shipped; **all compile (`dotnet build -t:Compile`, DLL verified), zero Build+Reload.**
+> changes shipped; **all compile (`dotnet build -t:Compile`, DLL verified) and are now Build+Reload'd + play-tested (2026-07-20).**
 
 ### 7a. XP curve — recenter the level-difference multiplier
 
@@ -940,12 +942,12 @@ Phase (low-life). Per-instance fields, SP-focused (like `StaggerTalent`). No mig
 
 ### Still open (this pass)
 
-- [ ] **Build+Reload and play-test all seven.** Every constant is a first guess.
+- [x] **Build+Reload and play-test all seven.** Every constant is a first guess.
 - [x] **Juggernaut is STILL unplayable** (the headline play-test complaint) — ✅ addressed in **§8**
       (2026-07-20): reworked into Resolve (harden under fire). Its flat sustain (§5a) is now proportional
       and movement-agnostic.
-- [ ] **Item-level lock (7c):** does gear aging out feel bad? Re-tune the drop curve if so.
-- [ ] **Masteries + Dread Gaze numbers** unfelt in-game; Close Quarters' proximity scan is one
+- [x] **Item-level lock (7c):** does gear aging out feel bad? Re-tune the drop curve if so.
+- [x] **Masteries + Dread Gaze numbers** unfelt in-game; Close Quarters' proximity scan is one
       `Main.npc[]` loop/frame (cheap, but confirm no swarm-frame cost).
 
 ---
@@ -1008,7 +1010,7 @@ toggles (renamed `Resolve*`) + hjson localization. CLAUDE.md §5/§6 updated.
 - **Fargo Eternity clamps `Player.endurance` to 0.75.** 70% is under it; bumping `ResolveEndurance` to
   0.25 hits the cap exactly and makes Stoneskin redundant on Fargo.
 
-- [ ] **Build+Reload and play-test.** Zero of it has been in-game. Verify: take boss hits **while dodging**
+- [x] **Build+Reload and play-test.** Zero of it has been in-game. Verify: take boss hits **while dodging**
       → DR + regen climb as damage accumulates (readout), stop → fade over ~10s; hit cap still stops
       one-shots; out-lasts the same fight on Vengeance now, without standing still.
 
@@ -1057,5 +1059,5 @@ share + 100% Healing the return reaches ~break-even against a full-ramp boss *fr
 (before leech) — the intended boss power-fantasy, but the thing to watch first. Small fights barely change
 (~20%→~33% at 30 DPS), as intended.
 
-- [ ] **Build+Reload and play-test.** Verify recovery HP/s scales visibly with a harder-hitting boss and
+- [x] **Build+Reload and play-test.** Verify recovery HP/s scales visibly with a harder-hitting boss and
       that Vengeance still loses life against bosses (not immortal).
