@@ -11,8 +11,16 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// <summary>
 	/// World-evil row: rot, consumption, and blood that fights back.
 	///
-	/// Plaguebearer is a rhythmic plague: for a 3-second window every 10 seconds your hits convert a
-	/// large share of your damage into all five ailments at once; between windows it lies dormant.
+	/// Plaguebearer is a rhythmic, mutating plague and a deliberate gamble. For a 3-second window every
+	/// 10 seconds it converts 100% of your damage into ONE element, and which element rotates blindly on
+	/// every cycle (Fire -> Cold -> Lightning -> Poison -> Bleed, then wraps) with no regard for the
+	/// enemy. Between windows it lies dormant.
+	///
+	/// <b>Under true conversion this is matchup roulette</b> (see <c>ElementalConversionApplier</c>,
+	/// CLAUDE.md §10): converting your whole hit into an element the target RESISTS guts your damage for
+	/// that window, while a window that lands on a WEAKNESS is enormous. High risk, high reward, entirely
+	/// down to the rotation vs the enemy in front of you. Blind in-order rotation is a chosen design, not
+	/// an oversight.
 	/// </summary>
 	public class PlaguebearerTalent : TalentBehaviour
 	{
@@ -21,52 +29,66 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Plaguebearer";
 
 		public override string Description =>
-			"Every 10 seconds, enter a 3-second plague: your hits convert a large share of your damage "
-			+ "into Bleeding, On Fire, Venom, Frostburn and Electrified at once. Dormant between windows.";
+			"Every 10 seconds, enter a 3-second plague: 100% of your damage is CONVERTED into a single "
+			+ "element, rotating each cycle — Fire, Cold, Lightning, Poison, then Bleed. Converted damage "
+			+ "faces that element's resistance instead of armour, so a window is huge on a weakness and "
+			+ "feeble on a resistance. Dormant between windows.";
 
 		private const int CycleTicks = 600;   // 10s cycle
 		private const int WindowTicks = 180;  // 3s of that cycle is the active plague window
 
 		/// <summary>
-		/// Conversion granted in EVERY element while the window is open. 8% x five elements is 40% total
-		/// conversion for three seconds — a strong burst — averaging ~12% over the full ten-second cycle.
-		/// This replaced an always-on 3%/element plus a near-unconditional +40% damage rider: the talent
-		/// landed all five debuffs on the first hit, so the "3+ debuffs" gate was met on essentially
-		/// every hit and the +40% was effectively unconditional.
+		/// Conversion granted to the CURRENTLY ACTIVE element while the window is open. 1.0 = 100% of the
+		/// hit is converted to that one element — the physical hit is fully replaced by elemental damage
+		/// facing that element's resistance (ElementalConversionApplier does the split). One element at a
+		/// time, cycling blindly through the roster, replaced the previous 8%-in-every-element spread.
 		/// </summary>
-		private const float WindowConversionPerElement = 0.08f;
+		private const float WindowConversion = 1.0f;
 
 		private int cycleTimer;
+
+		/// <summary>
+		/// Index into DamageElement (0 = Fire) of the ailment the current window converts to. Advances
+		/// by one on each cycle boundary so successive windows rotate through the whole roster. Starts at
+		/// Fire on a fresh pick/respawn so the rotation is predictable.
+		/// </summary>
+		private int currentElement;
 
 		public override void OnActivate(Player player)
 		{
 			cycleTimer = 0;
+			currentElement = 0;
 		}
 
 		public override void OnRespawn(Player player)
 		{
 			cycleTimer = 0;
+			currentElement = 0;
 		}
 
 		public override void PostUpdate(Player player)
 		{
 			cycleTimer++;
 			if (cycleTimer >= CycleTicks)
+			{
 				cycleTimer = 0;
+				// New cycle: rotate to the next ailment so the upcoming window converts to it.
+				currentElement = (currentElement + 1) % DamageElementInfo.Count;
+			}
 		}
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
-			// Only feed the conversion pool during the open window. A bare AddBuff would do nothing under
-			// the elemental system — the damage comes from ElementalConversion, which ElementalDotApplier
-			// reads on the next hit and also uses to place the debuff icons.
+			// Only feed the conversion pool during the open window, and only for the one active element.
+			// ElementalConversionApplier reads this pool on the next hit and does the physical->elemental
+			// split; contributing 100 here means "convert the whole hit to this element this window".
 			if (cycleTimer >= WindowTicks)
 				return;
 
 			CombatEffectStats effects = player.GetModPlayer<CombatEffectStats>();
 
-			for (int e = 0; e < DamageElementInfo.Count; e++)
-				effects.ElementalConversion[e] += WindowConversionPerElement * 100f;
+			// The pool is whole percents; WindowConversion is a fraction. Hence the x100.
+			effects.ElementalConversion[currentElement] += WindowConversion * 100f;
 		}
 	}
 
@@ -130,8 +152,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 					continue;
 
 				int hitDirection = other.Center.X < center.X ? -1 : 1;
-				// SimpleStrikeNPC bypasses ModPlayer.OnHitNPC (ElementalDotApplier.cs:22-27), so the blast
-				// does not re-leech or re-convert — intended.
+				// SimpleStrikeNPC bypasses ModPlayer.OnHitNPC and ModifyHitNPC, so the blast does not
+				// re-leech or re-convert (ElementalConversionApplier runs in ModifyHitNPC) — intended.
 				other.SimpleStrikeNPC(damage, hitDirection, false, 0f, DamageClass.Generic);
 				hitAnything = true;
 			}

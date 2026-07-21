@@ -23,7 +23,7 @@ namespace ProgressionExpanded.Src.UI
 	/// would deal — it is a "know your enemy" readout, so it must not drift with the local player's gear.
 	///
 	/// ⚠️ <b>Reading an elemental resistance materialises the enemy's resistance seed on first hover.</b>
-	/// <c>ElementalResistance.Get</c> reads <c>ElementalDotNPC.ResistanceSeed</c>, which lazily rolls via
+	/// <c>ElementalResistance.Get</c> reads <c>ElementalResistanceNPC.ResistanceSeed</c>, which lazily rolls via
 	/// <c>Main.rand</c> the first time it is touched. Hovering therefore advances <c>Main.rand</c> and
 	/// locks the seed in a frame early. The seed is immutable once set, so the panel and later combat
 	/// always agree; the roll fires at most once per enemy; and Bleed / never-killed pinnacles return

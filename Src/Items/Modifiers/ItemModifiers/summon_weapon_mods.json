@@ -550,7 +550,7 @@
     },
     {
       "ModId": "increased_ailment",
-      "DisplayName": "{value}% increased Ailment Effect",
+      "DisplayName": "{value}% increased Elemental Damage",
       "Keyword": "increased",
       "StatKey": "AilmentEffect",
       "Weight": 40,

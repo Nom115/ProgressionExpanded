@@ -67,22 +67,31 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// </summary>
 		public float ConsumableHealingPercent;
 
-		/// <summary>Percent increase to on-hit ailment/DoT effect (debuff durations).</summary>
+		/// <summary>
+		/// Percent increase to converted elemental damage. <see cref="ElementalConversionApplier"/>
+		/// multiplies the elemental slice of each hit by <c>1 + AilmentPercent/100</c>, so it is the
+		/// payoff stat for a conversion build (the "increased Elemental Damage" weapon roll).
+		///
+		/// <b>Repurposed.</b> Before the true-conversion rework this scaled DoT DURATION — meaningless
+		/// once the elemental damage became instant. It was renamed in intent (not in StatKey, to avoid
+		/// item save/JSON churn — the key is still "AilmentEffect") to scale magnitude instead.
+		/// </summary>
 		public float AilmentPercent;
 
 		/// <summary>Percent increase to area-of-effect (explosion radius/damage).</summary>
 		public float AreaPercent;
 
 		/// <summary>
-		/// Percent of the damage you deal that is added, per second, as damage-over-time of each
-		/// element. Indexed by <c>(int)DamageElement</c>.
+		/// Percent of the damage you deal that is CONVERTED from armour-facing physical into instant
+		/// elemental damage of each element, facing that element's resistance instead of armour. Indexed
+		/// by <c>(int)DamageElement</c>. A trade, not a bonus: see <see cref="ElementalConversionApplier"/>
+		/// and CLAUDE.md §10.
 		///
-		/// Every conversion source pools here — the five elemental masteries, Plaguebearer, and
-		/// (Phase 3) rolled item modifiers — and <see cref="ElementalDotApplier"/> is the sole
-		/// consumer, exactly as <see cref="LifeLeechApplier"/> is for LifeLeechPercent. It owns the
-		/// duration, the resistance lookup, the stack cap and the buff icon. Grant conversion by
-		/// adding here; do not apply a debuff yourself, because a debuff on its own now deals
-		/// nothing at all.
+		/// Every conversion source pools here — the five elemental masteries, Plaguebearer, and rolled
+		/// item modifiers — and <see cref="ElementalConversionApplier"/> is the sole consumer, exactly as
+		/// <see cref="LifeLeechApplier"/> is for LifeLeechPercent. It owns the split (physical shrunk via
+		/// TargetDamageMultiplier, elemental added via ModifyHitInfo), the resistance lookup and the 100%
+		/// total cap. Grant conversion by adding here.
 		///
 		/// Readonly and cleared rather than reallocated: this runs every frame for every player.
 		/// </summary>
@@ -90,7 +99,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 		/// <summary>
 		/// Percent of each element's resistance this player ignores, indexed by <c>(int)DamageElement</c>.
-		/// Rolled onto weapons/accessories (Phase 3) and consumed once, by <see cref="ElementalDotApplier"/>,
+		/// Rolled onto weapons/accessories and consumed once, by <see cref="ElementalConversionApplier"/>,
 		/// which passes it as the <c>penetration</c> argument to <c>ElementalResistance.Get</c>.
 		///
 		/// <b>This is a NEW stat, deliberately separate from vanilla ArmorPenetration.</b> Armour pen

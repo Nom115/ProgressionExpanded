@@ -17,7 +17,7 @@ namespace ProgressionExpanded.Src.NPCs
 	/// player can build Dread across a whole pack, which is the point of the rework.
 	///
 	/// <b>Int fields, so no custom Clone is needed.</b> Both fields are value types, so the default
-	/// GlobalNPC.Clone (MemberwiseClone) copies them correctly — unlike ElementalDotNPC's instance list,
+	/// GlobalNPC.Clone (MemberwiseClone) copies them correctly — unlike a reference-type field,
 	/// which needs a deep copy. A split worm segment simply inherits its parent's stacks, which is fine.
 	///
 	/// Single-player focused: the eruption applies damage directly via SimpleStrikeNPC and rolls no

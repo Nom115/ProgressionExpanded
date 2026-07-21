@@ -33,12 +33,12 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 	/// element-symmetric by construction and <b>type-agnostic</b>, so modded enemies — Calamity's and
 	/// Fargo's, which are most of what actually spawns — are differentiated exactly like vanilla's.
 	///
-	/// <b>Pull, never cache.</b> Get is only ever reached from ElementalDotApplier.OnHitNPC, which is
-	/// necessarily after NewNPC -> SetDefaults -> ScaleStats -> OnSpawn (NPC.NewNPC:91956 vs :91980).
-	/// Every source is stable by then, so there is no ordering problem provided nothing is cached.
-	/// Caching at spawn would make us depend on GlobalNPC hook order between EnemyModifierSystem's
-	/// OnSpawn and ours, which is not ours to rely on. Every source also defaults to zero resistance
-	/// (empty modifier list, unrolled seed), so a missed init can only ever under-resist.
+	/// <b>Pull, never cache.</b> Get is reached from ElementalConversionApplier.ModifyHitNPC (and the
+	/// hover panel), which is necessarily after NewNPC -> SetDefaults -> ScaleStats -> OnSpawn. Every
+	/// source is stable by then, so there is no ordering problem provided nothing is cached. Caching at
+	/// spawn would make us depend on GlobalNPC hook order between EnemyModifierSystem's OnSpawn and ours,
+	/// which is not ours to rely on. Every source also defaults to zero resistance (empty modifier list,
+	/// unrolled seed), so a missed init can only ever under-resist.
 	///
 	/// <b>Why npc.buffImmune is NOT a source, and please do not add it back.</b> It looks like the
 	/// obvious answer — vanilla appears to curate which enemies shrug off which element — and it is a
@@ -81,9 +81,10 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 		/// <summary>
 		/// The most an enemy can resist. Deliberately below 1.0: nothing is ever immune, so an
 		/// elemental build always does *something* everywhere rather than reading 0 on a bad
-		/// matchup. This matters more than usual here because elemental DoT is added on top of the
-		/// hit rather than converted out of it — a hard immunity would delete the investment
-		/// outright instead of merely blunting it.
+		/// matchup. This matters MORE under true conversion than it did under the old added-on-top DoT:
+		/// the converted slice is taken OUT of the physical hit, so a hard immunity would delete that
+		/// slice of your damage outright rather than merely failing to add a bonus. The 0.90 floor caps
+		/// the worst matchup at "the converted slice does 10%", not "0%".
 		/// </summary>
 		public const float MaxResistance = 0.90f;
 
@@ -96,18 +97,18 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 		/// <summary>
 		/// Centre of the per-element roll — i.e. the average elemental resistance in the game.
 		///
-		/// This is Phase 2's headline dial. The roll is the only source that touches every enemy, so
-		/// this number alone decides how much the elemental masteries are blunted overall: five
-		/// masteries at rank 4 add ~160% of direct DPS unmitigated (ElementalMastery.ConversionPerTier
-		/// x ElementalDotApplier.BaseDurationSeconds, per element), and this brings that to ~134%.
+		/// <b>The headline dial, and its meaning changed with the true-conversion rework.</b> The roll is
+		/// the only resistance source that touches every enemy, so this number decides what a BLIND
+		/// convert costs. Under true conversion a converted slice faces this instead of armour, so a
+		/// positive mean means converting into a random enemy is a slight net LOSS on average — you break
+		/// even or win only by targeting a weakness (via the hover panel) or by carrying elemental
+		/// penetration. Kept at +15% deliberately (chosen with the player): conversion is a matchup /
+		/// knowledge lever, not a flat boost.
 		///
-		/// <b>A mean of zero was the considered alternative and is a real fork, not an oversight.</b>
-		/// At zero, Phase 2 changes the tuning identity by nothing — it merely turns a flat 32% per
-		/// element into a distribution centred on 32% — and total output stays ConversionPerTier's job
-		/// to tune, which is arguably the honest dial for it. A positive mean was chosen so that Phase
-		/// 2 does the mitigating it exists to do. If elemental output ends up over-nerfed, move this
-		/// toward zero and cut ConversionPerTier instead, rather than fighting the two against
-		/// each other. Untested in play.
+		/// If the elemental masteries end up feeling like a trap (a blind convert is a self-nerf, so a
+		/// point in one only pays when you exploit a weakness), the honest fix is to move this toward 0
+		/// (making a blind convert roughly break-even) rather than inflating ConversionPerTier. Untested
+		/// in play.
 		/// </summary>
 		public const float RollMean = 0.15f;
 
@@ -146,18 +147,18 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 		/// <b>does not scale it with world level</b>, so this curve does not drift as the game goes on.
 		/// Median-defense elites do reach ~50% though, which is the number to watch.
 		///
-		/// <b>Bleed pays for armour twice, and that is the design.</b> NPC.HitModifiers.GetDamage
-		/// already subtracts <c>max(defense - armorPen, 0) x DefenseEffectiveness</c> (0.5 for NPCs)
-		/// before we ever see damageDone, so armour has reduced the hit our DoT is computed from. That
-		/// first charge is universal — every element pays it. This resistance is an additional,
-		/// proportional charge that only Bleed pays, which is precisely what makes Bleed "physical,
-		/// limited by the enemy's armour instead". Against a median enemy it lands Bleed at roughly 90%
-		/// of an average element's output, bought with zero variance and total immunity to wards.
+		/// <b>Bleed faces armour ONCE, through this resistance — that is what makes it "physical".</b>
+		/// Under true conversion the Bleed slice is converted OUT of the hit before vanilla defense
+		/// applies (like every converted element), so it does not pay vanilla armour at all; instead it
+		/// pays this proportional, armour-derived resistance. The elemental branches roll a resistance and
+		/// can be warded; Bleed's resistance is derived purely from the enemy's live armour, so it is
+		/// predictable and totally ward-immune — the reliable answer when an elemental matchup goes bad,
+		/// but the one element a heavily-armoured enemy shrugs off. (The UNconverted physical remainder of
+		/// your hit still faces vanilla defense as normal; that is a separate charge on a separate slice.)
 		///
-		/// <b>150 was argued for and rejected on the numbers.</b> The case was that at 50 Bleed is only
-		/// 62% of an element and therefore a trap — but that figure assumes a mean-zero roll and a
-		/// p75-defense enemy. Against the roll mean actually shipped and a median enemy it is ~90%.
-		/// If Rend under-performs in play-test, this is the first constant to move.
+		/// <b>150 was argued for and rejected on the numbers.</b> At 50, median Bleed resistance is ~23%
+		/// and p90 ~43%. If Rend under-performs in play-test, this is the first constant to move (higher =
+		/// less Bleed resistance across the board).
 		/// </summary>
 		public const float BleedArmourHalfPoint = 50f;
 
@@ -216,7 +217,7 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Elemental
 		/// </summary>
 		private static float RandomRoll(NPC npc, DamageElement element)
 		{
-			int seed = npc.GetGlobalNPC<ElementalDotNPC>().ResistanceSeed;
+			int seed = npc.GetGlobalNPC<ElementalResistanceNPC>().ResistanceSeed;
 
 			// Two independent uniforms summed give a triangular distribution on [-1, 1] once centred.
 			float u1 = Hash01(seed, (int)element * 2);

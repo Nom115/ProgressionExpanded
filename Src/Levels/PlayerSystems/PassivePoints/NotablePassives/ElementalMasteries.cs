@@ -4,25 +4,16 @@ using ProgressionExpanded.Src.NPCs.Enemy.Elemental;
 namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePassives
 {
 	/// <summary>
-	/// Base for the five elemental masteries. Each converts a percentage of the damage you deal into
-	/// damage-over-time of its element, by contributing to the shared pool on CombatEffectStats.
-	/// <c>ElementalDotApplier</c> is the pool's sole consumer and owns the duration, the resistance
-	/// lookup, the stack cap and the buff icon.
+	/// Base for the five elemental masteries. Each CONVERTS a percentage of the damage you deal into
+	/// instant elemental damage of its element, by contributing to the shared pool on CombatEffectStats.
+	/// <c>ElementalConversionApplier</c> is the pool's sole consumer and owns the split and the
+	/// resistance lookup.
 	///
-	/// <b>What these used to be, and why that had to change.</b> They called
-	/// <c>target.AddBuff(BuffID.OnFire, ticks)</c> and let vanilla deal the damage. That was broken
-	/// in two ways at once. Vanilla's NPC DoT is a flat constant — 4 HP/s for OnFire, 8 for
-	/// Frostburn, 30 for Venom — identical at level 1 and level 100, against enemy health that the
-	/// world-level system scales without limit; and Venom was therefore 7.5x Immolation for the same
-	/// point cost, for no design reason. Worse, vanilla has <b>no NPC DoT at all</b> for Bleeding or
-	/// Electrified: <c>NPC.UpdateNPC_BuffSetFlags</c> never handles buff ids 30 or 144, and no
-	/// <c>npc.bleeding</c>/<c>npc.electrified</c> field exists — they are player-only. Rend and Shock
-	/// applied an icon, ticked a timer, and dealt literally nothing. Both faults come from the same
-	/// root: AddBuff's only lever is duration, so a DoT sized by the hit that applied it simply
-	/// cannot be expressed that way.
-	///
-	/// Contributing to a pool that a mod-owned ticker reads fixes both, and gives all five the same
-	/// shape as Bloodthirst.
+	/// <b>Conversion is a trade, not a bonus.</b> Since the true-conversion rework (CLAUDE.md §10) the
+	/// converted slice is taken OUT of the armour-facing hit and dealt against the target's per-element
+	/// resistance instead — so a point in one of these is a matchup lever: it wins on an enemy weak to
+	/// (or heavily armoured against) that element, and loses on one that resists it. Read the target with
+	/// the hover panel. Contributing to a shared pool gives all five the same shape as Bloodthirst.
 	/// </summary>
 	public abstract class ElementalMastery : ModPlayer
 	{
@@ -39,14 +30,15 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.PassivePoints.NotablePass
 		protected abstract DamageElement Element { get; }
 
 		/// <summary>
-		/// Fraction of the damage you deal that becomes this element's DoT, per second, per tier.
+		/// Fraction of the damage you deal that is CONVERTED to this element, per tier. At 2% per tier
+		/// that is 8% converted at rank 4.
 		///
-		/// <b>This is the primary balance dial for the whole elemental system.</b> The tuning
-		/// identity: for any weapon under the stack cap, DoT DPS divided by direct DPS equals
-		/// <c>conversion x duration</c> — and that is independent of attack speed, because a weapon
-		/// hitting twice as often stacks twice as many instances of half the size. At 2% per tier
-		/// that is 8% at rank 4, which against the 4s base duration is 32% of your direct DPS per
-		/// element. Untested in play; expect to move it.
+		/// <b>Balance note after the true-conversion rework.</b> This is no longer a flat DPS add — it is
+		/// how much of your hit gets redirected from armour to this element's resistance. So 8% is a light
+		/// matchup dip: near-neutral on an average enemy (RollMean +15% makes a blind convert a small
+		/// loss), a gain against a weakness or heavy armour. If the masteries feel too weak to spend a
+		/// point on, this is the dial (raise it), or move ElementalResistance.RollMean toward 0. Untested
+		/// in play.
 		/// </summary>
 		protected virtual float ConversionPerTier => 0.02f;
 
