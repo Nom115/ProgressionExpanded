@@ -369,12 +369,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		///   (which runs first, alphabetically) has already added the warrior's 0.50, and this stacks on
 		///   top. Clamp to 1 to match ClassBaselines. On Fargo Eternity endurance is separately clamped
 		///   to 0.75.
-		/// - <b>Proportional life regen</b> — statLifeMax2 * fraction, the exact scaling shape as Stagger's
-		///   moving 2%/s (StaggerTalent.ApplyMovingLifeRegen). A plain unguarded ADD in
+		/// - <b>Proportional life regen</b> — statLifeMax2 * fraction. A plain unguarded ADD in
 		///   PostUpdateMiscEffects: it lands in lifeRegen before UpdateLifeRegen's DoT blocks (so a DoT
 		///   positionally zeroes it, the wall's answer key) and before Second Wind's LifeRegenPercent (so
 		///   that scales it). The * 2f is the half-HP-per-second unit. No lifeRegen > 0 guard, because it
 		///   is an add — the guard exists on multiplies. This REPLACES the old flat Strength regen.
+		///   (Stagger's moving heal used the same lifeRegen shape until it became a direct heal keyed to
+		///   movement speed — Resolve deliberately keeps the DoT-zeroed regen, since DoTs are its answer key.)
 		/// </summary>
 		private void ApplyResolve(Player player)
 		{

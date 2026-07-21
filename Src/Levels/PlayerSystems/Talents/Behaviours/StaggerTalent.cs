@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -75,7 +76,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			+ "touches your life — but only while you have mana left to arm it. The 45% that still reaches "
 			+ "your life is reduced by a flat 5% of your maximum mana. Critical hits burn away "
 			+ "25% of the remaining damage, once per second. Your mana only recovers while you stand "
-			+ "still; while you move, you regenerate an extra 2% of your maximum life per second instead. "
+			+ "still; while you move, you instead heal for half your current movement speed (in mph) as "
+			+ "life per second — a direct heal that ignores damage-over-time effects. "
 			+ "Plant to refill the pool, move to repair the bar.";
 
 		private const float DamagePercent = 0.55f;
@@ -108,30 +110,39 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float FlatRegenPerSecond = 8f;
 
 		/// <summary>
-		/// Life regenerated per second while MOVING, as a fraction of maximum life. Untested first guess,
-		/// and the other half of the stance — see the class docs for the yin-yang it completes.
+		/// HEALING per second while MOVING, as a fraction of the player's current speed in miles per hour
+		/// — the number the vanilla Stopwatch accessory shows. At 0.5, running at 40 mph heals 20 HP/s.
+		/// The other half of the stance; see the class docs for the yin-yang it completes.
 		///
-		/// <b>Proportional, and that is the whole reason it is expressed this way.</b> The talent's own
-		/// docs above explain why flat regeneration cannot work here: +8/s is +8/s at level 1 and at level
-		/// 100, against enemy damage that scales without a cap, so it falls off no matter what number it
-		/// is given. This is the same fix mana already got — 2% of maximum life scales with every point of
-		/// Strength, every % life bonus and every life crystal, forever, so it never needs re-tuning
-		/// against world level. It is the ONLY sustain on this talent that does not decay.
+		/// <b>Why speed, and why a direct heal.</b> This used to be "+2% of maximum life per second" fed
+		/// into player.lifeRegen. lifeRegen is zeroed by vanilla DoTs on the very frame they tick (the
+		/// positional zeroing documented on ApplyMovingHeal), so the sustain vanished under exactly the
+		/// pressure it exists to answer. It is now a real heal through LifeLeechApplier.Heal — statLife +=,
+		/// no overheal, immune to that zeroing and to vanilla's lifeSteal accumulator — and its size is
+		/// tied to how fast you are moving, so "repair the bar while moving" is literally what it does.
 		///
-		/// <b>This replaced a x2 flat-regen bonus for standing still</b> (removed 2026-07-17). That bonus
-		/// gave planting mana AND more life, which meant moving was pure downside and the stance had only
-		/// one real answer. The axis now has two opposed ones — see the class docs.
+		/// <b>The trade this makes.</b> Keyed to mph, the heal scales with MOBILITY (boots/wings), not with
+		/// max life or world level — so unlike the old 2% (which never decayed) it plateaus once mobility
+		/// is maxed and will not track late-game enemy damage on its own. DoT-immunity is the gain; this is
+		/// the dial to raise if it reads weak in the late game. Untested first guess.
 		///
-		/// <b>There is deliberately no commitment threshold in front of it</b>, and it survives the same
-		/// argument its predecessor did. A threshold existed once to stop a frame-perfect trick against
-		/// the old planted DAMAGE bonus — run for the healing, stop for the single frame your hit lands,
-		/// bank both. There is no damage lever any more, and both halves of this axis accrue per tick, so
-		/// a player who alternates gets exactly the fraction of each that they paid for: wiggling for half
-		/// a second buys half a second of mana and half a second of life, never both. Averaging the two is
-		/// a legitimate line to play, not an exploit — it is strictly worse than committing when you know
-		/// which resource you actually need.
+		/// <b>This replaced a x2 flat-regen bonus for standing still</b> (removed 2026-07-17), which gave
+		/// planting mana AND more life so that moving was pure downside; the axis now has two opposed
+		/// answers. <b>There is deliberately no commitment threshold</b> — both halves accrue per tick, so
+		/// a player who alternates gets exactly the fraction of each they paid for; averaging is a
+		/// legitimate, strictly-worse line, not an exploit.
+		///
+		/// internal so StaggerDebuff (a sibling class in this file) can read it for the live tooltip.
 		/// </summary>
-		private const float MovingLifeRegenFraction = 0.02f;
+		internal const float MovingHealPerMph = 0.5f;
+
+		/// <summary>
+		/// How often the moving heal pays out, in ticks. The per-frame amount is accumulated (fractions
+		/// carried across frames) and delivered in one batch every this-many ticks, so the heal pops in
+		/// readable chunks (~twice a second) instead of a +1 green number every frame. Mirrors the cadence
+		/// the old Vengeful Recovery used.
+		/// </summary>
+		private const int HealIntervalTicks = 30;
 
 		/// <summary>
 		/// Flat reduction applied to the HEALTH-bound portion of a hit (the immediate 45%), as a fraction
@@ -224,6 +235,12 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// <summary>Ticks until a critical hit may burn the bleed again. Counted down in PostUpdate.</summary>
 		private int critPurgeCooldown;
 
+		/// <summary>Sub-1 HP of the moving heal carried between payouts so no fraction is ever lost.</summary>
+		private float healAccumulator;
+
+		/// <summary>Ticks since the last moving-heal payout. See ApplyMovingHeal / HealIntervalTicks.</summary>
+		private int healTimer;
+
 		/// <summary>
 		/// Maximum mana is half of maximum life, on top of whatever the player already had — mana
 		/// crystals and Intellect still count, so this raises the ceiling rather than replacing it.
@@ -267,6 +284,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			instances.Clear();
 			accumulatedDamage = 0f;
 			critPurgeCooldown = 0;
+			healAccumulator = 0f;
+			healTimer = 0;
 
 			int buffType = ModContent.BuffType<StaggerDebuff>();
 			if (player.HasBuff(buffType))
@@ -274,76 +293,73 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// Move and your life comes back. The opposite half of SuppressPassiveManaRegen, and the two are
-		/// meant to be read together — see the class docs.
+		/// Move and your life comes back — a real heal keyed to how fast you are going. The opposite half
+		/// of SuppressPassiveManaRegen; the two are meant to be read together — see the class docs.
 		///
-		/// <b>PostUpdateMiscEffects, NOT the UpdateLifeRegen hook, and the choice is what makes this a
-		/// plain additive contribution rather than a private healing channel.</b> This hook runs
-		/// immediately before Player.UpdateLifeRegen (Player.cs:24940/24941), so the value lands in
-		/// lifeRegen while it is still just a pile of flat adds — exactly where this talent's own +8/s
-		/// arrives via StatApplier, and where campfire, heart lantern and gear regen join it moments
-		/// later. Two things follow, both of them the point:
-		/// - <b>External % increases scale it.</b> Anything contributing from the UpdateLifeRegen hook —
-		///   Second Wind's LifeRegenPercent, since it was moved there on 2026-07-17 — multiplies a
-		///   lifeRegen that already contains this. Contributing from UpdateLifeRegen ourselves would be a
-		///   race against those scalers decided by tML's ModPlayer order, which is exactly the bug
-		///   StatApplier.ApplyLifeRegenPercent documents.
-		/// - <b>Vanilla DoTs switch it off — because of WHERE it lands, not because of what it is.</b>
-		///   UpdateLifeRegen opens with one block per debuff (:17749-17852: Poisoned, Venom, On Fire x3,
-		///   Frostburn x2, Burning, Suffocation, Electrified, Tongued), each of which does
-		///   `if (lifeRegen > 0) lifeRegen = 0;`, then `lifeRegenTime = 0f;`, then subtracts its own
-		///   degen. That wipes everything contributed BEFORE it — which is every regen source this mod
-		///   has, since they all land in PostUpdateMiscEffects. Same treatment as the flat +8/s and
-		///   Juggernaut's Strength regen; consistent, and it keeps DoTs as the answer key they are for.
+		/// <b>A direct heal, NOT lifeRegen, and that is the whole point.</b> This used to add to
+		/// player.lifeRegen, which vanilla's DoT blocks zero on the very frame a debuff ticks (the
+		/// positional zeroing this method used to document at length). So the sustain vanished under
+		/// exactly the pressure it exists to answer — Poison, On Fire, Bleed. It now pays out through
+		/// LifeLeechApplier.Heal, the shared no-overheal helper (statLife += clamped to statLifeMax2, pops
+		/// the green number), which is a heal rather than regeneration and is therefore immune to that
+		/// zeroing and to vanilla's lifeSteal accumulator. Nothing a DoT does can hinder it.
 		///
-		/// <b>⚠️ The zeroing is POSITIONAL, not global — "a DoT means no regen" is the wrong reading.</b>
-		/// Vanilla's own Hearty Meal (:17928), campfire (:17930) and heart lantern (:17934) are added
-		/// AFTER those blocks and are NOT wiped; they offset the degen instead. Under Poisoned (-4 half-HP/s)
-		/// a campfire and a lantern bring you to -1, and honey (:17854, +4 but clamped at 0) then takes you
-		/// to +3 — genuinely positive while poisoned. So a debuffed player is usually NOT at zero regen. It
-		/// is specifically OUR regen that is off, because of where we contribute. Anything in the
-		/// UpdateLifeRegen hook (:17938) is likewise past the blocks and untouched.
+		/// <b>Amount = MovingHealPerMph x current mph, per second.</b> CurrentMph reproduces the vanilla
+		/// Stopwatch reading, so "half your speed" means half the number the Stopwatch shows. Standing
+		/// still is 0 mph, so "while moving" falls out for free — but the IsStandingStillForSpecialEffects
+		/// gate is kept anyway so "planted = no life bonus" is exact and reads the same as the mana half.
 		///
-		/// <b>No lifeRegen > 0 guard here, and its absence is correct twice over.</b>
-		/// - This is an ADD, not a multiply. The guard exists on multiplies because scaling a negative
-		///   lifeRegen amplifies a DoT; adding to one merely offsets it, which is what regeneration IS.
-		///   Vanilla's own late adds above are unguarded for exactly this reason.
-		/// - It would be near-dead code anyway: ResetEffects zeroes lifeRegen (:17158) at Update:24501,
-		///   and the debuff blocks do not run until UpdateLifeRegen at Update:24941 — one line after this
-		///   hook. So lifeRegen cannot yet be negative when we run, short of another mod contributing
-		///   negative regen from PostUpdateMiscEffects.
+		/// <b>Accumulated and batched.</b> The per-frame amount is a fraction of an HP, so it is summed
+		/// into healAccumulator (carrying the remainder across frames — no lost HP) and paid out only every
+		/// HealIntervalTicks, giving readable ~twice-a-second green pops instead of +1 spam. The whole part
+		/// is subtracted unconditionally, so overflow at full life is discarded (regen wastes at full too)
+		/// and the accumulator stays bounded.
 		///
 		/// <b>Unconditional, NOT bleed-gated</b> — hence its position above the instances.Count early
-		/// return in PostUpdateMiscEffects, the same reason SuppressPassiveManaRegen sits there. Gated,
-		/// the axis would vanish the moment the last bleed expired, which is precisely when a player is
+		/// return in PostUpdateMiscEffects, the same reason SuppressPassiveManaRegen sits there. Gated, the
+		/// axis would vanish the moment the last bleed expired, which is precisely when a player is
 		/// deciding whether to plant or to run.
-		///
-		/// statLifeMax2 rather than statLifeMax: both already hold this talent's +150 and every Strength
-		/// point (ResetEffects runs ModifyMaxStats first — see ModifyMaxStats above), but statLifeMax2
-		/// adds vanilla's own life bonuses on top, making it the bar actually on screen. "2% of your
-		/// maximum life" has to mean 2% of the number the player can read.
-		///
-		/// IsStandingStillForSpecialEffects is vanilla's own definition of stationary (|velocity| under
-		/// 0.05 on both axes) — the one Shiny Stone uses. Deliberately NOT gated on itemAnimation == 0
-		/// the way Shiny Stone is: this fires while MOVING, and a player who is swinging mid-run has not
-		/// stopped moving.
-		///
-		/// <b>There is deliberately no NaturalLifeRegen counterpart</b>, and moving it there would in fact
-		/// invert this. Vanilla already scales the natural ramp x1.25 while stationary against x0.5 while
-		/// moving (Player.cs:18003) — i.e. vanilla punishes movement on that channel. Flat regen has no
-		/// such treatment, which is exactly why flat is the channel worth paying a mover on.
-		///
-		/// The (int) truncation loses under half an HP/s and cannot compound — lifeRegen is an int by
-		/// nature and every vanilla contributor rounds the same way. Not worth an accumulator; the bleed
-		/// has one because it is the thing being metered, not a rate being added.
 		/// </summary>
-		private static void ApplyMovingLifeRegen(Player player)
+		private void ApplyMovingHeal(Player player)
 		{
 			if (player.IsStandingStillForSpecialEffects)
 				return;
 
-			// lifeRegen is in HALF-HP per second, hence the 2. Getting this wrong halves the talent.
-			player.lifeRegen += (int)(player.statLifeMax2 * MovingLifeRegenFraction * 2f);
+			healAccumulator += CurrentMph(player) * MovingHealPerMph / 60f;
+
+			if (++healTimer < HealIntervalTicks)
+				return;
+			healTimer = 0;
+
+			int whole = (int)healAccumulator;
+			if (whole > 0)
+			{
+				LifeLeechApplier.Heal(player, whole);
+				healAccumulator -= whole;
+			}
+		}
+
+		/// <summary>
+		/// The player's current speed in miles per hour, matching what the vanilla Stopwatch accessory
+		/// shows. Verified against Terraria.Main.DrawInfoAccs: the Stopwatch converts
+		/// (velocity + instantMovementAccumulatedThisFrame).Length() by 216000/42240 (= x5.1136:
+		/// 60 ticks/s x 3600 s/hr over 5280 ft/mi x 8 px/ft), halving it in water and quartering it in
+		/// honey unless merman/ignoreWater. We use the instantaneous speed rather than the Stopwatch's
+		/// 60-frame rolling average — the same formula, no display lag, and the per-frame heal accumulation
+		/// smooths it anyway. internal so StaggerDebuff can read it for the live tooltip.
+		/// </summary>
+		internal static float CurrentMph(Player player)
+		{
+			float speed = (player.velocity + player.instantMovementAccumulatedThisFrame).Length();
+			if (!player.merman && !player.ignoreWater)
+			{
+				if (player.honeyWet)
+					speed /= 4f;
+				else if (player.wet)
+					speed /= 2f;
+			}
+
+			return speed * 216000f / 42240f;
 		}
 
 		/// <summary>
@@ -596,7 +612,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			// The stance, both halves. Planted refills the pool, moving repairs the bar; each is the
 			// other's cost. Both sit above the early return because neither is bleed-gated.
 			SuppressPassiveManaRegen(player);
-			ApplyMovingLifeRegen(player);
+			ApplyMovingHeal(player);
 
 			if (instances.Count == 0)
 			{
@@ -754,12 +770,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 					// "mana will NOT recover" alone reads as a pure penalty for moving, which is exactly
 					// the misreading the 2026-07-17 rework exists to kill.
 					bool planted = player.IsStandingStillForSpecialEffects;
+					float mph = StaggerTalent.CurrentMph(player);
 
 					tip = $"Taking {(int)stagger.GetTotalStaggeredDamage()} damage over {stagger.GetLongestStaggerDuration():F1} seconds"
 						+ $"\nPaid from mana: {player.statMana}/{player.statManaMax2}"
 						+ (planted
 							? "\nPlanted — mana refilling, no life bonus"
-							: "\nMoving — +2% life/s, mana will NOT recover")
+							: $"\nMoving — +{(int)Math.Round(mph * StaggerTalent.MovingHealPerMph)} life/s ({(int)Math.Round(mph)} mph), mana will NOT recover")
 						+ "\nCritical hits burn 25% of it";
 					return;
 				}
