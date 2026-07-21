@@ -35,6 +35,8 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Desert
 
 		public string GetPrefix() => "Sunbaked";
 
+		public ModifierCategory Category => ModifierCategory.Defensive;
+
 		public void Apply(Terraria.NPC npc) { }
 
 		public void OnHitByPlayer(Terraria.NPC npc, Player player) { }

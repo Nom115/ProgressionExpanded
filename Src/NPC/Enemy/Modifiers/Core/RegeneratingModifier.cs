@@ -9,6 +9,8 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 	{
 		public string GetPrefix() => "Regenerating";
 
+		public ModifierCategory Category => ModifierCategory.Defensive;
+
 		public void Apply(Terraria.NPC npc)
 		{
 			// Stat boost applied, regen handled in UpdateLifeRegen

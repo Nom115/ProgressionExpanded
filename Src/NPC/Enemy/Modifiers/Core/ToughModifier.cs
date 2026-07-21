@@ -9,6 +9,8 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 	{
 		public string GetPrefix() => "Tough";
 
+		public ModifierCategory Category => ModifierCategory.Defensive;
+
 		public void Apply(Terraria.NPC npc)
 		{
 			// Increase defense by 50%

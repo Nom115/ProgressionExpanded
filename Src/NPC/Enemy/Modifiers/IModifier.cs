@@ -3,11 +3,34 @@ using Terraria;
 namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
 {
 	/// <summary>
+	/// How an affix reads for the purpose of <b>boss</b> curation. Bosses roll at most one
+	/// <see cref="Offensive"/> + one <see cref="Defensive"/> affix, and never an <see cref="Excluded"/>
+	/// one (those inflate HP, which bosses derive solely from the deterministic boss curve — see
+	/// <c>ModifierPool.RollBossModifiers</c> and <c>NPCLevelManager.ApplyLevelScaling</c>). Trash
+	/// enemies ignore this entirely and keep rolling from the whole pool.
+	/// </summary>
+	public enum ModifierCategory
+	{
+		Offensive,
+		Defensive,
+		Excluded
+	}
+
+	/// <summary>
 	/// Interface for enemy modifiers
 	/// Modifiers enhance enemies with special abilities and stat changes
 	/// </summary>
 	public interface IModifier
 	{
+		/// <summary>
+		/// Category used to curate boss affixes (see <see cref="ModifierCategory"/>). Defaults to
+		/// <see cref="ModifierCategory.Offensive"/>; only defensive and HP-inflating modifiers override
+		/// it. A default interface member, so the majority of affixes carry no override — mirroring how
+		/// <see cref="OnHitPlayer"/> is handled. Reachable only through an <see cref="IModifier"/>
+		/// reference, which is how the pool holds them.
+		/// </summary>
+		ModifierCategory Category => ModifierCategory.Offensive;
+
 		/// <summary>
 		/// Get the display prefix for this modifier (e.g., "Swift", "Blazing")
 		/// </summary>

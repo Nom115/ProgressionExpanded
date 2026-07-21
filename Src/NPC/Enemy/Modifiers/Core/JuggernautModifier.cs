@@ -9,6 +9,10 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 	{
 		public string GetPrefix() => "Juggernaut";
 
+		// Excluded from bosses: it doubles HP, and boss HP comes solely from the deterministic boss
+		// curve (NPCLevelManager.ApplyLevelScaling). Trash still rolls it normally.
+		public ModifierCategory Category => ModifierCategory.Excluded;
+
 		public void Apply(Terraria.NPC npc)
 		{
 			// Increase health by 100%

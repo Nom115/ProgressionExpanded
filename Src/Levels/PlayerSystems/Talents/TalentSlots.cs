@@ -118,5 +118,26 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents
 					yield return slot;
 			}
 		}
+
+		/// <summary>
+		/// The number of unlocked <b>boss-gated</b> talent slots (0–5), read from pure world state via
+		/// <see cref="BossKillTracker"/> — no <see cref="Player"/> needed. This is the boss difficulty
+		/// tier: each of these five slots (Eye of Cthulhu → world evil → Queen Bee → Skeletron → Wall of
+		/// Flesh) is a build-defining power spike, so the count tracks how much talent power the world's
+		/// characters have. Deliberately excludes the level-5 pinnacle slot (a constant) and the
+		/// non-gating King Slime / Deerclops. Consumed by the boss HP/damage curves in
+		/// <c>WorldLevelManager</c>. All five gates are pre-hardmode, so this pins at 5 from Wall of
+		/// Flesh onward and world level carries the ramp past it.
+		/// </summary>
+		public static int WorldProgressionTier()
+		{
+			int tier = 0;
+			if (BossKillTracker.DownedEyeOfCthulhu) tier++;
+			if (BossKillTracker.DownedEvilBoss) tier++;
+			if (BossKillTracker.DownedQueenBee) tier++;
+			if (BossKillTracker.DownedSkeletron) tier++;
+			if (BossKillTracker.DownedWallOfFlesh) tier++;
+			return tier;
+		}
 	}
 }

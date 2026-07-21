@@ -11,16 +11,15 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 	/// so ranged and boss attacks scale with the firing enemy's level exactly like contact
 	/// damage does (see <see cref="NPCLevelManager.ModifyHitPlayer"/>).
 	///
-	/// The firing NPC's level (and whether it's an untouched "pinnacle" boss) is captured at
-	/// spawn from its <see cref="NPCLevelManager"/>. Because it reads any NPC's level generically,
-	/// this works for projectiles fired by modded enemies with no per-enemy registration.
+	/// The firing NPC's level is captured at spawn from its <see cref="NPCLevelManager"/>. Because it
+	/// reads any NPC's level generically, this works for projectiles fired by modded enemies with no
+	/// per-enemy registration.
 	/// </summary>
 	public class HostileProjectileScaling : GlobalProjectile
 	{
 		public override bool InstancePerEntity => true;
 
 		private bool fromLeveledEnemy = false;
-		private bool sourceIsPinnacleBoss = false;
 		private int sourceEnemyLevel = 1;
 
 		public override void OnSpawn(Projectile projectile, IEntitySource source)
@@ -30,14 +29,14 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			{
 				fromLeveledEnemy = true;
 				sourceEnemyLevel = npc.GetGlobalNPC<NPCLevelManager>().GetLevel(npc);
-				sourceIsPinnacleBoss = BossProgressionTracker.IsPinnacleEncounter(npc);
 			}
 		}
 
 		public override void ModifyHitPlayer(Projectile projectile, Player target, ref Player.HurtModifiers modifiers)
 		{
-			// Pinnacle bosses ignore level entirely — their projectiles are untouched.
-			if (!fromLeveledEnemy || !projectile.hostile || sourceIsPinnacleBoss) return;
+			// First-encounter bosses are no longer special-cased — their projectiles scale like any
+			// other (their base stats come from the boss curve in NPCLevelManager.ApplyLevelScaling).
+			if (!fromLeveledEnemy || !projectile.hostile) return;
 
 			int playerLevel = PlayerLevelManager.GetLevel(target);
 			float multiplier = NPCLevelManager.GetEnemyDamageMultiplier(sourceEnemyLevel, playerLevel);

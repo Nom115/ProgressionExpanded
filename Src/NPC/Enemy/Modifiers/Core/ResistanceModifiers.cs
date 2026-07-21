@@ -41,6 +41,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Core
 
 		public abstract string GetPrefix();
 
+		// All four wards are defensive (single-element resistance). Set once on the base.
+		public ModifierCategory Category => ModifierCategory.Defensive;
+
 		public float GetResistance(DamageElement element)
 		{
 			return element == WardedElement ? ElementalResistance.WardResistance : 0f;

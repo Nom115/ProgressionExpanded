@@ -47,14 +47,16 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
 		}
 
 		/// <summary>
-		/// Roll random modifiers from the pool, filtering by conditions
+		/// Build the pool of modifiers eligible for this NPC: the always-available set plus any
+		/// conditional affixes whose CanApply passes. Returns fresh instances for the conditional ones
+		/// and the shared templates for the rest; callers always run the pick through
+		/// <see cref="CreateModifierInstance"/> before use, so the templates are never handed out.
 		/// </summary>
-		public static List<IModifier> RollModifiers(int count, Terraria.NPC npc = null)
+		private static List<IModifier> BuildAvailablePool(Terraria.NPC npc)
 		{
 			if (allModifiers == null || allModifiers.Count == 0)
 				Initialize();
 
-			var result = new List<IModifier>();
 			var available = new List<IModifier>(allModifiers);
 
 			// Add conditional modifiers
@@ -85,32 +87,77 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers
 				available.Add(new InfestedModifier());
 			}
 
+			return available;
+		}
+
+		/// <summary>
+		/// Weighted single pick from a pool (by <see cref="IModifier.GetSpawnWeight"/>). Returns the
+		/// selected template/instance (NOT a fresh copy — the caller clones it), or null for an empty or
+		/// zero-weight pool.
+		/// </summary>
+		private static IModifier WeightedPick(List<IModifier> pool)
+		{
+			if (pool.Count == 0)
+				return null;
+
+			int totalWeight = pool.Sum(m => m.GetSpawnWeight());
+			if (totalWeight <= 0)
+				return null;
+
+			int roll = Main.rand.Next(totalWeight);
+			int current = 0;
+			foreach (var modifier in pool)
+			{
+				current += modifier.GetSpawnWeight();
+				if (roll < current)
+					return modifier;
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Roll random modifiers from the pool, filtering by conditions
+		/// </summary>
+		public static List<IModifier> RollModifiers(int count, Terraria.NPC npc = null)
+		{
+			var available = BuildAvailablePool(npc);
+			var result = new List<IModifier>();
 
 			for (int i = 0; i < count && available.Count > 0; i++)
 			{
-				// Weighted selection
-				int totalWeight = available.Sum(m => m.GetSpawnWeight());
-				int roll = Main.rand.Next(totalWeight);
-				int current = 0;
+				var selected = WeightedPick(available);
+				if (selected == null)
+					break;
 
-				IModifier selected = null;
-				foreach (var modifier in available)
-				{
-					current += modifier.GetSpawnWeight();
-					if (roll < current)
-					{
-						selected = modifier;
-						break;
-					}
-				}
-
-				if (selected != null)
-				{
-					// Create new instance of the modifier
-					result.Add(CreateModifierInstance(selected));
-					available.Remove(selected);
-				}
+				// Create new instance of the modifier
+				result.Add(CreateModifierInstance(selected));
+				available.Remove(selected);
 			}
+
+			return result;
+		}
+
+		/// <summary>
+		/// Roll the CURATED affix set for a boss: at most one Offensive + one Defensive affix, and never
+		/// an <see cref="ModifierCategory.Excluded"/> one (Juggernaut — HP-inflating; boss HP comes from
+		/// the deterministic boss curve, see NPCLevelManager.ApplyLevelScaling). This is what keeps a
+		/// repeat boss varied without the old 2–5-affix HP blow-up. Because it yields ≤2 modifiers, both
+		/// prefixes always show in the name (GenerateDisplayName renders the first two), so a rolled ward
+		/// is never hidden on a boss.
+		/// </summary>
+		public static List<IModifier> RollBossModifiers(Terraria.NPC npc)
+		{
+			var available = BuildAvailablePool(npc);
+			var result = new List<IModifier>(2);
+
+			var offensive = WeightedPick(available.Where(m => m.Category == ModifierCategory.Offensive).ToList());
+			if (offensive != null)
+				result.Add(CreateModifierInstance(offensive));
+
+			var defensive = WeightedPick(available.Where(m => m.Category == ModifierCategory.Defensive).ToList());
+			if (defensive != null)
+				result.Add(CreateModifierInstance(defensive));
 
 			return result;
 		}

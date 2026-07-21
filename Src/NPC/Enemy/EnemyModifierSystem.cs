@@ -74,31 +74,25 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			// Apply rarity stat multipliers
 			ApplyRarityStats(npc, rarityInfo);
 
-			// Decide how many modifiers to roll.
-			int modifierCount;
-			if (WormBossHelper.IsHead(npc) && BossProgressionTracker.IsTrackedBoss(npc))
+			// Roll modifiers.
+			if (BossProgressionTracker.IsTrackedBoss(npc))
 			{
-				// Worm boss head: exactly ONE modifier for the whole body — segments copy this.
-				modifierCount = 1;
-			}
-			else if (npc.boss)
-			{
-				// Non-worm bosses that have already been defeated always get 2-5 modifiers.
-				modifierCount = Main.rand.Next(2, 6);
+				// Bosses (including worm-boss heads): a CURATED set — at most one offensive + one
+				// defensive affix, and never an HP-inflating one. This keeps a repeat boss varied without
+				// the old 2–5-affix HP blow-up; its bulk comes from the boss curve instead. Worm segments
+				// copy this via CopyFromHead.
+				modifiers = ModifierPool.RollBossModifiers(npc);
 			}
 			else
 			{
 				// Normal enemies — rarity-based modifier count (0 for Common).
-				modifierCount = rarityInfo.MaxModifiers > 0 ? Main.rand.Next(1, rarityInfo.MaxModifiers + 1) : 0;
+				int modifierCount = rarityInfo.MaxModifiers > 0 ? Main.rand.Next(1, rarityInfo.MaxModifiers + 1) : 0;
+				modifiers = modifierCount > 0 ? ModifierPool.RollModifiers(modifierCount, npc) : new List<IModifier>();
 			}
 
-			if (modifierCount > 0)
+			foreach (var modifier in modifiers)
 			{
-				modifiers = ModifierPool.RollModifiers(modifierCount, npc);
-				foreach (var modifier in modifiers)
-				{
-					modifier.Apply(npc);
-				}
+				modifier.Apply(npc);
 			}
 
 			// Generate display name
@@ -149,6 +143,13 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 
 		private void ApplyRarityStats(Terraria.NPC npc, RarityInfo rarityInfo)
 		{
+			// Bosses: rarity is cosmetic only (name / color / XP / loot). Their HP and damage come
+			// solely from the deterministic boss curve (NPCLevelManager.ApplyLevelScaling), so no rarity
+			// stat multiplier — this is half of what stops the old rarity × Juggernaut HP blow-up (the
+			// other half is excluding HP-inflating affixes in RollBossModifiers). Trash is unaffected.
+			if (BossProgressionTracker.IsTrackedBoss(npc))
+				return;
+
 			if (rarityInfo.StatMultiplier > 1.0f)
 			{
 				// Increase health

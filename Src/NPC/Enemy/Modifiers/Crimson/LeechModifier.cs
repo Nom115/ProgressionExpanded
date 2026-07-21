@@ -12,6 +12,8 @@ namespace ProgressionExpanded.Src.NPCs.Enemy.Modifiers.Crimson
 	{
 		public string GetPrefix() => "Leeching";
 
+		public ModifierCategory Category => ModifierCategory.Defensive;
+
 		public void Apply(Terraria.NPC npc) { }
 
 		public void OnHitByPlayer(Terraria.NPC npc, Player player)

@@ -162,6 +162,60 @@ namespace ProgressionExpanded.Src.Levels.WorldLevel
 				ENEMY_DAMAGE_MAX_MULTIPLIER);
 		}
 
+		// --- Boss scaling. Deliberately SEPARATE from the trash GetEnemy*Multiplier curves so boss
+		// tuning never disturbs trash balance. Both are ADDITIVE (base + tier + world), not a product of
+		// two growing curves, so they cannot run away, and both are clamped so nothing becomes a slog. ---
+		//
+		// The dominant term is the TALENT TIER (0–5 unlocked boss-gated talent slots — see
+		// TalentSlots.WorldProgressionTier): each slot is a build-defining power spike, so boss
+		// difficulty steps up the "0 → Cthulhu" ladder pre-hardmode. The gentle per-world-level term
+		// keeps bosses scaling AFTER Wall of Flesh (tier pinned at 5) through hardmode / Calamity endgame,
+		// where there are no more talent slots to unlock.
+		//
+		// All constants are first guesses — the exact 3–4 min target can only be dialed by play-test
+		// (player DPS at a given progression state is not computable here). Dials, by impact:
+		// PER_TALENT + BASE/CAP (TTK and ladder steepness), then PER_WORLD_LEVEL (endgame carry).
+		private const float BOSS_HP_BASE = 1.8f;
+		private const float BOSS_HP_PER_TALENT = 0.40f;    // 5 gates → +2.0
+		private const float BOSS_HP_PER_WORLD_LEVEL = 0.03f;
+		private const float BOSS_HP_FLOOR = 1.8f;
+		private const float BOSS_HP_CAP = 5.0f;
+
+		private const float BOSS_DAMAGE_BASE = 1.2f;
+		private const float BOSS_DAMAGE_PER_TALENT = 0.12f;
+		private const float BOSS_DAMAGE_PER_WORLD_LEVEL = 0.02f;
+		private const float BOSS_DAMAGE_FLOOR = 1.3f;
+		private const float BOSS_DAMAGE_CAP = 2.5f;         // damage is lethality, not friction — kept low
+
+		/// <summary>
+		/// Health multiplier for a BOSS, applied on top of the vanilla (difficulty-scaled) base.
+		/// <paramref name="talentTier"/> is TalentSlots.WorldProgressionTier() (0–5).
+		/// Worked ladder: first Eye of Cthulhu (tier 0, WL~5) ≈ ×1.9; Skeletron (tier 2, WL~10) ≈ ×2.9;
+		/// Wall of Flesh (tier 4, WL~18) ≈ ×3.9; hardmode/endgame (tier 5, WL 30→60) ≈ ×4.7 → cap ×5.0.
+		/// </summary>
+		public static float GetBossHealthMultiplier(int talentTier)
+		{
+			int worldLevel = GetWorldLevel();
+			float value = BOSS_HP_BASE
+				+ talentTier * BOSS_HP_PER_TALENT
+				+ (worldLevel - 1) * BOSS_HP_PER_WORLD_LEVEL;
+			return System.Math.Clamp(value, BOSS_HP_FLOOR, BOSS_HP_CAP);
+		}
+
+		/// <summary>
+		/// Damage multiplier for a BOSS, applied on top of the vanilla (difficulty-scaled) base.
+		/// Gentler + capped for the same reason as <see cref="GetEnemyDamageMultiplier"/> — damage is
+		/// lethality answered by EHP (~×10 headroom), not friction answered by DPS (~×1000).
+		/// </summary>
+		public static float GetBossDamageMultiplier(int talentTier)
+		{
+			int worldLevel = GetWorldLevel();
+			float value = BOSS_DAMAGE_BASE
+				+ talentTier * BOSS_DAMAGE_PER_TALENT
+				+ (worldLevel - 1) * BOSS_DAMAGE_PER_WORLD_LEVEL;
+			return System.Math.Clamp(value, BOSS_DAMAGE_FLOOR, BOSS_DAMAGE_CAP);
+		}
+
 		/// <summary>
 		/// Get loot quality multiplier based on world level
 		/// </summary>

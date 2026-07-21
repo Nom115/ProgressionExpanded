@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ProgressionExpanded.Src.Levels;
 using ProgressionExpanded.Src.Levels.PlayerSystems;
+using ProgressionExpanded.Src.Levels.PlayerSystems.Talents;
 using ProgressionExpanded.Src.Levels.WorldLevel;
 using ProgressionExpanded.Src.NPCs.Enemy;
 using ProgressionExpanded.Utils;
@@ -198,9 +199,9 @@ namespace ProgressionExpanded.Src.NPCs
 				InitializeLevel(npc);
 			}
 
-			// Pinnacle bosses ignore level entirely — their damage is untouched.
-			if (BossProgressionTracker.IsPinnacleEncounter(npc)) return;
-
+			// (First-encounter bosses are no longer special-cased: their HP/damage now come from the
+			// deterministic boss curve in ApplyLevelScaling, so a first kill == a repeat kill. This
+			// level-difference term is the offset-based depth tax and is ~×1.0 for a surface boss.)
 			int playerLevel = PlayerLevelManager.GetLevel(target);
 			float multiplier = GetEnemyDamageMultiplier(npcLevel, playerLevel);
 			if (multiplier != 1.0f)
@@ -210,13 +211,12 @@ namespace ProgressionExpanded.Src.NPCs
 		}
 
 		/// <summary>
-		/// Apply the player-vs-enemy level-difference damage multiplier to an outgoing hit.
-		/// Skipped entirely for pinnacle bosses (level has no bearing on their damage taken).
+		/// Apply the player-vs-enemy level-difference damage multiplier to an outgoing hit. No longer
+		/// special-cased for first-encounter bosses (their stats come from the boss curve in
+		/// <see cref="ApplyLevelScaling"/>); for a boss at offset 0 this term is ×1.0 anyway.
 		/// </summary>
 		private void ApplyPlayerDamageScaling(Terraria.NPC npc, Terraria.Player player, ref Terraria.NPC.HitModifiers modifiers)
 		{
-			if (BossProgressionTracker.IsPinnacleEncounter(npc)) return;
-
 			int playerLevel = PlayerLevelManager.GetLevel(player);
 			float multiplier = GetPlayerDamageMultiplier(npcLevel, playerLevel);
 			if (multiplier != 1.0f)
@@ -255,24 +255,64 @@ namespace ProgressionExpanded.Src.NPCs
 		{
 			if (npc.lifeMax <= 5 || npc.friendly) return; // Skip townspeople and critters
 
-			// Pinnacle boss (first-ever kill): leave its health completely untouched.
-			if (BossProgressionTracker.IsPinnacleEncounter(npc)) return;
-
-			// Get world level scaling multipliers
-			float healthMultiplier = WorldLevelManager.GetEnemyHealthMultiplier();
-			float damageMultiplier = WorldLevelManager.GetEnemyDamageMultiplier();
-
-			int levelOffset = LevelOffset();
-
-			// Health scales with the offset (5% per level of deviation from the world baseline).
-			// Preserve the current health fraction rather than healing to full: this scaling can run
-			// lazily from ModifyHitBy* the first time the player strikes an NPC that was not scaled at
-			// spawn (transformed/converted enemies), and healing a partially-damaged enemy to full on
-			// first hit is a bug. At spawn the NPC is already at full, so it stays full.
+			// Preserve the current health FRACTION across any lifeMax change rather than healing to full:
+			// this scaling can run lazily from ModifyHitBy* the first time the player strikes an NPC that
+			// was not scaled at spawn (transformed/converted enemies), and healing a partially-damaged
+			// enemy to full on first hit is a bug. At spawn the NPC is already at full, so it stays full.
 			int oldLifeMax = npc.lifeMax;
 			bool wasFullHealth = npc.life >= oldLifeMax;
-			float levelHealthMultiplier = 1.0f + (levelOffset * HEALTH_PER_LEVEL_OFFSET);
-			npc.lifeMax = (int)(npc.lifeMax * healthMultiplier * levelHealthMultiplier);
+
+			if (BossProgressionTracker.IsTrackedBoss(npc))
+			{
+				// Bosses get a single DETERMINISTIC curve keyed on the talent-slot progression tier plus
+				// world level — applied identically to first and repeat encounters (no pinnacle skip, so a
+				// first kill is no longer a trivial vanilla-stat mob). No level offset: a summoned boss
+				// event is not a depth-scaled trash mob, and an offset term would reintroduce the very
+				// variance this rework removes. Rarity (EnemyModifierSystem.ApplyRarityStats) and
+				// HP-inflating affixes (ModifierPool.RollBossModifiers) are both excluded for bosses, so
+				// this multiply-in-place is the ONLY thing touching boss HP → boss HP = vanillaBase ×
+				// curve exactly, with no RNG. The boss damage curve multiplies in place too, so it
+				// composes order-independently with a rolled Brutal affix. Boss defense is left at vanilla
+				// base — a rolled Tough affix is the only boss defense bump, since defense is a subtractive
+				// cliff (CLAUDE.md §5b).
+				int tier = TalentSlots.WorldProgressionTier();
+				npc.lifeMax = (int)(npc.lifeMax * WorldLevelManager.GetBossHealthMultiplier(tier));
+				npc.damage = (int)(npc.damage * WorldLevelManager.GetBossDamageMultiplier(tier));
+			}
+			else
+			{
+				// Trash: the world-level curve × the per-NPC level offset (the depth/biome deviation).
+				float healthMultiplier = WorldLevelManager.GetEnemyHealthMultiplier();
+				float damageMultiplier = WorldLevelManager.GetEnemyDamageMultiplier();
+
+				int levelOffset = LevelOffset();
+
+				// Health scales with the offset (5% per level of deviation from the world baseline).
+				float levelHealthMultiplier = 1.0f + (levelOffset * HEALTH_PER_LEVEL_OFFSET);
+				npc.lifeMax = (int)(npc.lifeMax * healthMultiplier * levelHealthMultiplier);
+
+				// Damage takes the world multiplier and NOTHING else.
+				//
+				// ⚠️ There is deliberately no per-NPC damage term here, and adding one back is a bug.
+				// It would double-count the offset: GetEnemyDamageMultiplier(npcLevel, playerLevel) in
+				// ModifyHitPlayer already scales damage by exactly that offset (playerLevel tracks
+				// worldLevel — see the comment there), so a term here would charge it a second time.
+				// Health and defense have no such counterpart, which is why they keep theirs.
+				npc.damage = (int)(npc.damage * damageMultiplier);
+
+				// Defense scales with the offset (2% per level of deviation).
+				float levelDefenseMultiplier = 1.0f + (levelOffset * DEFENSE_PER_LEVEL_OFFSET);
+				npc.defense = (int)(npc.defense * levelDefenseMultiplier);
+				// Mirror onto defDefense: several aiStyles (Skeletron, EoC, Golem, Prime) reset
+				// defense = defDefense every frame, which would otherwise wipe this bonus. Vanilla snapshots
+				// defDefense == defense at the end of SetDefaults, before our OnSpawn multipliers run, so
+				// re-syncing here keeps the scaled value across those per-frame resets. Because every site
+				// that touches npc.defense re-reads it live and re-syncs, the two stay equal regardless of
+				// the order our GlobalNPCs' OnSpawn hooks run in.
+				npc.defDefense = npc.defense;
+			}
+
+			// Re-apply the preserved health fraction to the new lifeMax (both paths).
 			if (wasFullHealth)
 			{
 				npc.life = npc.lifeMax;
@@ -282,26 +322,6 @@ namespace ProgressionExpanded.Src.NPCs
 				int damageTaken = oldLifeMax - npc.life;
 				npc.life = System.Math.Max(1, npc.lifeMax - damageTaken);
 			}
-
-			// Damage takes the world multiplier and NOTHING else.
-			//
-			// ⚠️ There is deliberately no per-NPC damage term here, and adding one back is a bug.
-			// It would double-count the offset: GetEnemyDamageMultiplier(npcLevel, playerLevel) in
-			// ModifyHitPlayer already scales damage by exactly that offset (playerLevel tracks
-			// worldLevel — see the comment there), so a term here would charge it a second time.
-			// Health and defense have no such counterpart, which is why they keep theirs.
-			npc.damage = (int)(npc.damage * damageMultiplier);
-
-			// Defense scales with the offset (2% per level of deviation).
-			float levelDefenseMultiplier = 1.0f + (levelOffset * DEFENSE_PER_LEVEL_OFFSET);
-			npc.defense = (int)(npc.defense * levelDefenseMultiplier);
-			// Mirror onto defDefense: several aiStyles (Skeletron, EoC, Golem, Prime) reset
-			// defense = defDefense every frame, which would otherwise wipe this bonus. Vanilla snapshots
-			// defDefense == defense at the end of SetDefaults, before our OnSpawn multipliers run, so
-			// re-syncing here keeps the scaled value across those per-frame resets. Because every site
-			// that touches npc.defense re-reads it live and re-syncs, the two stay equal regardless of
-			// the order our GlobalNPCs' OnSpawn hooks run in.
-			npc.defDefense = npc.defense;
 		}
 
 		/// <summary>
