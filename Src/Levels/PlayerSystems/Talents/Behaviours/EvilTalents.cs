@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -11,6 +10,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 {
 	/// <summary>
 	/// World-evil row: rot, consumption, and blood that fights back.
+	///
+	/// Plaguebearer is a rhythmic plague: for a 3-second window every 10 seconds your hits convert a
+	/// large share of your damage into all five ailments at once; between windows it lies dormant.
 	/// </summary>
 	public class PlaguebearerTalent : TalentBehaviour
 	{
@@ -19,63 +21,57 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Plaguebearer";
 
 		public override string Description =>
-			"Your hits inflict Bleeding, On Fire, Venom, Frostburn and Electrified at once, each "
-			+ "dealing 3% of the damage you deal per second. Enemies suffering 3 or more debuffs "
-			+ "take 40% more damage from you.";
+			"Every 10 seconds, enter a 3-second plague: your hits convert a large share of your damage "
+			+ "into Bleeding, On Fire, Venom, Frostburn and Electrified at once. Dormant between windows.";
 
-		private const int DebuffsForBonus = 3;
-		private const float DamageBonus = 0.40f;
+		private const int CycleTicks = 600;   // 10s cycle
+		private const int WindowTicks = 180;  // 3s of that cycle is the active plague window
 
 		/// <summary>
-		/// Conversion granted in EVERY element, so all five debuffs land. Five elements at 3% is
-		/// 15% total conversion against a maxed single mastery's 8% — roughly twice a mastery, for
-		/// a boss-gated slot that costs no points and pays no breadth gate.
+		/// Conversion granted in EVERY element while the window is open. 8% x five elements is 40% total
+		/// conversion for three seconds — a strong burst — averaging ~12% over the full ten-second cycle.
+		/// This replaced an always-on 3%/element plus a near-unconditional +40% damage rider: the talent
+		/// landed all five debuffs on the first hit, so the "3+ debuffs" gate was met on essentially
+		/// every hit and the +40% was effectively unconditional.
 		/// </summary>
-		private const float ConversionPerElement = 0.03f;
+		private const float WindowConversionPerElement = 0.08f;
+
+		private int cycleTimer;
+
+		public override void OnActivate(Player player)
+		{
+			cycleTimer = 0;
+		}
+
+		public override void OnRespawn(Player player)
+		{
+			cycleTimer = 0;
+		}
+
+		public override void PostUpdate(Player player)
+		{
+			cycleTimer++;
+			if (cycleTimer >= CycleTicks)
+				cycleTimer = 0;
+		}
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
-			// This used to be an OnHitNPC that called AddBuff for all five plagues directly. Under
-			// the elemental system that would inflict five debuffs which deal NOTHING: a debuff is
-			// only an icon now, and the damage comes from the conversion pool. Granting conversion
-			// instead is what makes the talent do what its name says.
-			//
-			// ElementalDotApplier applies the icon for every element that has conversion, so all
-			// five still land and CountDebuffs below still sees them — the 3+ bonus is unchanged.
-			// It also means this pools with the elemental masteries rather than competing: an
-			// Immolation rank 4 Plaguebearer has 8% + 3% = 11% fire conversion.
+			// Only feed the conversion pool during the open window. A bare AddBuff would do nothing under
+			// the elemental system — the damage comes from ElementalConversion, which ElementalDotApplier
+			// reads on the next hit and also uses to place the debuff icons.
+			if (cycleTimer >= WindowTicks)
+				return;
+
 			CombatEffectStats effects = player.GetModPlayer<CombatEffectStats>();
 
 			for (int e = 0; e < DamageElementInfo.Count; e++)
-				effects.ElementalConversion[e] += ConversionPerElement * 100f;
-		}
-
-		public override void ModifyHitNPC(Player player, NPC target, ref NPC.HitModifiers modifiers)
-		{
-			if (CountDebuffs(target) >= DebuffsForBonus)
-				modifiers.FinalDamage *= 1f + DamageBonus;
-		}
-
-		/// <summary>
-		/// Counts real debuffs, not every buff. An NPC's buff array holds both, and Main.debuff is
-		/// the only thing that distinguishes them — so a friendly buff would otherwise count toward
-		/// the bonus.
-		/// </summary>
-		private static int CountDebuffs(NPC target)
-		{
-			int count = 0;
-			for (int i = 0; i < NPC.maxBuffs; i++)
-			{
-				int type = target.buffType[i];
-				if (type > 0 && target.buffTime[i] > 0 && Main.debuff[type])
-					count++;
-			}
-			return count;
+				effects.ElementalConversion[e] += WindowConversionPerElement * 100f;
 		}
 	}
 
 	/// <summary>
-	/// Eat to live. The intended partner for Fleshless — leech replaces the regeneration it takes.
+	/// Eat to live. Leech sustains you while attacking, and every kill detonates the corpse.
 	/// </summary>
 	public class DevourerTalent : TalentBehaviour
 	{
@@ -84,17 +80,18 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Devourer";
 
 		public override string Description =>
-			"Leech 12% of the damage you deal as life, up to 15% of your maximum life per hit. "
-			+ "Killing an enemy restores 8% of your maximum life.";
+			"Leech 6% of the damage you deal as life, up to 15% of your maximum life per hit. Killing an "
+			+ "enemy detonates its corpse for 5% of its maximum life to everything within 5 tiles.";
 
-		private const float LeechFraction = 0.12f;
-		private const float KillHealFraction = 0.08f;
+		private const float LeechFraction = 0.06f;
+		private const float KillExplosionFraction = 0.05f;
+		private const float KillExplosionTiles = 5f;
 
 		/// <summary>
-		/// The on-hit leech is declarative so it pools with every other leech source (gear,
-		/// Bloodthirst, Vengeance) into one capped payout in LifeLeechApplier. This used to be a
-		/// bespoke OnHitNPC heal with its own cooldown, which meant a Devourer + Vengeance player
-		/// would proc TWO independent leech heals per hit and neither cap would see the other.
+		/// The on-hit leech is declarative so it pools with every other leech source (gear, Bloodthirst,
+		/// Vengeance) into one capped payout in LifeLeechApplier — which already owns the ~0.3s cooldown
+		/// (HealCooldownTicks) and the 15% per-hit cap. That shared limiter is the cooldown; a bespoke
+		/// second on-hit heal would just add a second uncoordinated cap (CLAUDE.md §8).
 		///
 		/// Fraction, not whole percent — StatApplier's percent path multiplies by 100 on the way in.
 		/// </summary>
@@ -107,19 +104,53 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void OnKillNPC(Player player, NPC target)
 		{
-			// The kill burst stays bespoke: it is a fraction of MAX LIFE, not of damage dealt, so it
-			// is not a leech and has no business in the leech pool. Deliberately not cooldowned —
-			// kills are their own rate limit, and the burst is what makes this feel like devouring
-			// rather than sipping.
+			// Detonate the corpse instead of self-healing on kill. The old 8%-of-max-life kill burst
+			// stacked with the leech and had no cap — it was most of why the talent over-healed. This
+			// pays the kill out as damage to the pack instead.
 			if (!LifeLeechApplier.IsLeechableTarget(target))
 				return;
 
-			LifeLeechApplier.Heal(player, (int)(player.statLifeMax2 * KillHealFraction));
+			int damage = (int)(target.lifeMax * KillExplosionFraction);
+			if (damage < 1)
+				return;
+
+			float areaMul = 1f + player.GetModPlayer<CombatEffectStats>().AreaPercent / 100f;
+			float radius = KillExplosionTiles * 16f * areaMul;
+			Vector2 center = target.Center;
+
+			bool hitAnything = false;
+
+			for (int i = 0; i < Main.maxNPCs; i++)
+			{
+				NPC other = Main.npc[i];
+				if (!other.active || other.friendly || other.dontTakeDamage || other.immortal)
+					continue;
+
+				if (Vector2.Distance(other.Center, center) > radius)
+					continue;
+
+				int hitDirection = other.Center.X < center.X ? -1 : 1;
+				// SimpleStrikeNPC bypasses ModPlayer.OnHitNPC (ElementalDotApplier.cs:22-27), so the blast
+				// does not re-leech or re-convert — intended.
+				other.SimpleStrikeNPC(damage, hitDirection, false, 0f, DamageClass.Generic);
+				hitAnything = true;
+			}
+
+			if (hitAnything && Main.netMode != NetmodeID.Server)
+			{
+				SoundEngine.PlaySound(SoundID.Item14, center);
+				for (int i = 0; i < 16; i++)
+				{
+					Dust dust = Dust.NewDustPerfect(center, DustID.Blood,
+						Main.rand.NextVector2Circular(1f, 1f) * Main.rand.NextFloat(2f, 5f));
+					dust.noGravity = true;
+				}
+			}
 		}
 	}
 
 	/// <summary>
-	/// Hurt me and the room bleeds with me.
+	/// Hurt me and the room bleeds with me — but only every four seconds.
 	/// </summary>
 	public class CorruptedBloodTalent : TalentBehaviour
 	{
@@ -128,14 +159,35 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Corrupted Blood";
 
 		public override string Description =>
-			"When you take damage, every enemy within 20 tiles takes that much damage. "
-			+ "Pairs viciously with Stagger — the bleed keeps splashing.";
+			"When you take damage, every enemy within 20 tiles takes that much damage. 4 second cooldown.";
 
 		private const float RangeInTiles = 20f;
+		private const int CooldownTicks = 240; // 4s — without it a per-tick DoT (Stagger) re-fires it every frame
+
+		private int cooldown;
+
+		public override void PostUpdate(Player player)
+		{
+			if (cooldown > 0)
+				cooldown--;
+		}
+
+		public override void OnRespawn(Player player)
+		{
+			cooldown = 0;
+		}
+
+		public override void OnDeactivate(Player player)
+		{
+			cooldown = 0;
+		}
 
 		public override void PostHurt(Player player, Player.HurtInfo info)
 		{
 			if (info.Damage <= 0)
+				return;
+
+			if (cooldown > 0)
 				return;
 
 			float range = RangeInTiles * 16f;
@@ -157,6 +209,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 				npc.SimpleStrikeNPC(info.Damage, direction, false, 0f, DamageClass.Generic);
 				hitAnything = true;
 			}
+
+			// Start the cooldown whenever the effect triggers, so a barrage of DoT ticks can't re-fire it.
+			cooldown = CooldownTicks;
 
 			if (hitAnything && Main.netMode != NetmodeID.Server)
 			{

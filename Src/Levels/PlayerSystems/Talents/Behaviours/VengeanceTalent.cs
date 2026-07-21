@@ -108,7 +108,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private const float BonusFractionOfDamageTaken = 0.03f;
 
 		private const float LifeMultiplier = 1.00f;
-		private const float LeechFraction = 0.30f;
+		private const float LeechFraction = 0.20f;
 
 		/// <summary>
 		/// The whole loadout is one loop: take hits on a doubled pool, let them ramp you, and convert
