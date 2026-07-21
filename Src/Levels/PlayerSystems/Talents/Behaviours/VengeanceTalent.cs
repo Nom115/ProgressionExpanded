@@ -49,11 +49,26 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string SlotKey => "pinnacle";
 		public override string DisplayName => "Vengeance";
 
-		public override string Description =>
-			"Your maximum life is doubled. Leech 30% of the damage you deal as life. Add 2% of the damage "
-			+ "you have taken in the last 10 seconds to your hits AND to each leech — take 600 damage and "
-			+ "you hit for +12 and heal for 12 on top of the leech. Vengeance grants no life regeneration: "
-			+ "you heal only by fighting.";
+		/// <summary>
+		/// Every balance number in this text is derived from the constants below (LifeMultiplier,
+		/// LeechFraction, BonusFractionOfDamageTaken, WindowSeconds) so the tooltip can never drift
+		/// from the code — change a const and the description follows. The only literal is the "600
+		/// damage" worked example, whose result (+X) is itself computed from the constant.
+		/// </summary>
+		public override string Description
+		{
+			get
+			{
+				const float exampleDamageTaken = 600f;
+				float exampleBonus = exampleDamageTaken * BonusFractionOfDamageTaken;
+				return $"Your maximum life is multiplied by {1f + LifeMultiplier:0.##}. Leech "
+					+ $"{LeechFraction * 100f:0}% of the damage you deal as life. Add "
+					+ $"{BonusFractionOfDamageTaken * 100f:0}% of the damage you have taken in the last "
+					+ $"{WindowSeconds:0} seconds to your hits AND to each leech — take {exampleDamageTaken:0} "
+					+ $"damage and you hit for +{exampleBonus:0} and heal for {exampleBonus:0} on top of the "
+					+ "leech. Vengeance grants no life regeneration: you heal only by fighting.";
+			}
+		}
 
 		/// <summary>
 		/// How long a hit stays in the ramp. Raised 4s -> 10s on 2026-07-17 from play-test.
@@ -90,7 +105,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// amount to EVERY hit, so it is kept small — 10% was tuned down to 2% on 2026-07-21b as too strong.
 		/// This and WindowSeconds are the balance dials; watch it in play.
 		/// </summary>
-		private const float BonusFractionOfDamageTaken = 0.02f;
+		private const float BonusFractionOfDamageTaken = 0.03f;
 
 		private const float LifeMultiplier = 1.00f;
 		private const float LeechFraction = 0.30f;
