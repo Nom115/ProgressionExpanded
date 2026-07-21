@@ -392,8 +392,9 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		/// <summary>
 		/// Resolve as a 0..1 fraction: total damage taken in the window as a fraction of max life, times
-		/// ResolvePerLifeFraction, capped at 1. Same shape as VengeanceTalent.GetCurrentBonus, but it
-		/// feeds defense rather than offense. Guarded on statLifeMax2 for the divide.
+		/// ResolvePerLifeFraction, capped at 1. This still uses the fraction-of-max-life shape Vengeance's
+		/// ramp used to share; Vengeance switched to a flat absolute bonus on 2026-07-21, so they have since
+		/// diverged. Here it feeds defense rather than offense. Guarded on statLifeMax2 for the divide.
 		/// </summary>
 		private float ComputeResolve(Player player)
 		{

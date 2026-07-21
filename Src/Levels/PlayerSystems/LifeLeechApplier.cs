@@ -58,26 +58,29 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 
 			CombatEffectStats effects = CombatEffectStats.Get(Player);
 			float leechFraction = effects.LifeLeechPercent / 100f;
-			if (leechFraction <= 0f)
+			float flatBonus = effects.LifeLeechFlatBonus;
+			if (leechFraction <= 0f && flatBonus <= 0f)
 				return;
 
 			// Cap the leech first, THEN amplify it. Healing bonuses are the last multiplier applied —
 			// see MaxLeechPerHit — so a rolled "Healing" item genuinely raises the ceiling rather than
 			// being swallowed by it.
 			//
-			// HealingPercent, and deliberately NOT ConsumableHealingPercent. A bonus that already reaches
-			// this calculation through damageDone must not be allowed in a second time here, or it gets
-			// squared. Vengeance is exactly that: its ramp multiplies GetDamage, so damageDone below is
-			// already ramped; it used to contribute to HealingPercent as well and turned a full-ramp heal
-			// into 0.30 * baseHit * (1+r)^2 — 4x, against the 2x its own docs promised. It now feeds the
-			// consumable channel instead, which only potions read. See CombatEffectStats.
+			// HealingPercent, and deliberately NOT ConsumableHealingPercent: this is the leech path, and a
+			// bonus that already reaches leech through damageDone must not be counted a second time here or
+			// it squares. ConsumableHealingPercent is the potions-only channel that exists for exactly that
+			// reason — see CombatEffectStats.
 			float leeched = damageDone * leechFraction;
 
 			float perHitCap = Math.Max(1f, Player.statLifeMax2 * MaxLeechPerHit);
 			if (leeched > perHitCap)
 				leeched = perHitCap;
 
-			int heal = (int)Math.Round(leeched * (1f + effects.HealingPercent / 100f));
+			// A flat on-hit heal (Vengeance's damage-taken bonus, via LifeLeechFlatBonus) rides this same
+			// proc and cooldown so a fast weapon can't spam it. Added AFTER the per-hit leech cap — it is
+			// NOT leech, so the % cap must not bound it — and amplified by HealingPercent alongside the
+			// leech it accompanies.
+			int heal = (int)Math.Round((leeched + flatBonus) * (1f + effects.HealingPercent / 100f));
 
 			if (Heal(Player, heal))
 				healCooldown = HealCooldownTicks;

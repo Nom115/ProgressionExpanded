@@ -36,6 +36,16 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		/// </summary>
 		public float LifeLeechPercent;
 
+		/// <summary>
+		/// Flat HP added to EACH leech proc, on top of the percentage leech. Exists so a source that wants
+		/// a flat on-hit heal (Vengeance's damage-taken bonus) can ride the shared leech proc — its ~0.3s
+		/// cooldown, its valid-target and not-at-full-life gating — instead of writing a SECOND on-hit heal
+		/// with its own cooldown, which CLAUDE.md §8 forbids. <see cref="LifeLeechApplier"/> is the sole
+		/// consumer; it adds this after the per-hit leech cap (this is not leech, so the cap must not bound
+		/// it) and amplifies it by <see cref="HealingPercent"/> alongside the leech. Whole HP, not a percent.
+		/// </summary>
+		public float LifeLeechFlatBonus;
+
 		/// <summary>Percent increase to healing you receive (our heal procs + potions).</summary>
 		public float HealingPercent;
 
@@ -45,10 +55,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		///
 		/// This channel exists because of one specific hazard. A source that already scales leech
 		/// through <c>damageDone</c> must not ALSO scale the payout, or the same bonus enters the
-		/// calculation twice and the result is squared rather than doubled. Vengeance is exactly that
-		/// source: its ramp multiplies GetDamage in ResetEffects, so by the time LifeLeechApplier takes
-		/// its 30% of damageDone the ramp is already in there. Contributing the ramp to HealingPercent
-		/// as well made a full-ramp heal 4x instead of the intended 2x.
+		/// calculation twice and the result is squared rather than doubled. Vengeance USED to be exactly
+		/// that source: its old percent ramp multiplied GetDamage in ResetEffects, so by the time
+		/// LifeLeechApplier took its 30% of damageDone the ramp was already baked in, and contributing it
+		/// to HealingPercent as well made a full-ramp heal 4x instead of the intended 2x. (Vengeance is a
+		/// flat add now and no longer uses this channel; Juggernaut's +50% potion healing still does.)
 		///
 		/// So the rule is: if your bonus already reaches leech via the damage you dealt, contribute
 		/// HERE. If it is a genuine "healing received" bonus that leech should also see (the item
@@ -98,6 +109,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems
 		public override void ResetEffects()
 		{
 			LifeLeechPercent = 0f;
+			LifeLeechFlatBonus = 0f;
 			HealingPercent = 0f;
 			ConsumableHealingPercent = 0f;
 			AilmentPercent = 0f;

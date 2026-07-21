@@ -12,10 +12,9 @@ using ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours;
 namespace ProgressionExpanded.Src.UI
 {
 	/// <summary>
-	/// Live readout of the Vengeance ramp: how much damage you have taken inside the talent's window
-	/// (VengeanceTalent.WindowSeconds), and the increased damage &amp; healing it is currently buying.
-	/// Both the window and the gold "maxed" threshold are read from the talent, never restated here —
-	/// see WindowSeconds for why.
+	/// Live readout of Vengeance: how much damage you have taken inside the talent's window
+	/// (VengeanceTalent.WindowSeconds), and the flat damage &amp; healing bonus it is currently buying.
+	/// The window is read from the talent, never restated here — see WindowSeconds for why.
 	///
 	/// Vengeance is the only talent whose payoff moves several times a second and decays on its own,
 	/// so without a number on screen the player is guessing at when to commit. Stagger surfaces its
@@ -30,7 +29,6 @@ namespace ProgressionExpanded.Src.UI
 	{
 		private static readonly Color LabelColor = new Color(255, 190, 190);
 		private static readonly Color RampColor = new Color(255, 80, 80);
-		private static readonly Color MaxedColor = new Color(255, 215, 0);
 
 		private ProgressionConfig Config => ModContent.GetInstance<ProgressionConfig>();
 
@@ -51,7 +49,7 @@ namespace ProgressionExpanded.Src.UI
 			if (damage <= 0f)
 				return;
 
-			float bonus = vengeance.GetCurrentBonus(player);
+			float bonus = vengeance.GetBonusAmount(player);
 
 			DrawReadout(
 				spriteBatch,
@@ -82,16 +80,12 @@ namespace ProgressionExpanded.Src.UI
 		{
 			DynamicSpriteFont font = FontAssets.MouseText.Value;
 
-			// Gold once the bonus passes MaxRampBonus — a display-only "you're really cooking" threshold
-			// now that the ramp is uncapped (see VengeanceTalent.MaxRampBonus), not a functional ceiling.
-			bool maxed = bonus >= VengeanceTalent.MaxRampBonus;
-
-			string bonusText = $"Vengeance +{(int)(bonus * 100f)}% damage & healing";
+			string bonusText = $"Vengeance +{(int)bonus} damage & healing";
 			string damageText = $"{(int)damage} damage taken ({VengeanceTalent.WindowSeconds:0.#}s)";
 
 			float lineHeight = font.MeasureString(bonusText).Y * scale;
 
-			Terraria.Utils.DrawBorderString(spriteBatch, bonusText, position, maxed ? MaxedColor : RampColor, scale);
+			Terraria.Utils.DrawBorderString(spriteBatch, bonusText, position, RampColor, scale);
 			Terraria.Utils.DrawBorderString(spriteBatch, damageText, position + new Vector2(0f, lineHeight), LabelColor, scale);
 		}
 	}

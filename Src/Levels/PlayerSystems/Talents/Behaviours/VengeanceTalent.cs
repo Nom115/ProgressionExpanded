@@ -26,18 +26,22 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// what this talent punishes — which is why Fleshless (no regeneration, 40% DR) is a natural partner
 	/// rather than the trap it is next to Stagger.
 	///
-	/// <b>The RAMP is driven by the ABSOLUTE damage you have taken in the window</b> (reworked
-	/// 2026-07-21), NOT by damage as a fraction of max life. That is the Mists-of-Pandaria idea: a
-	/// harder-hitting boss ramps you faster and sustains you more, because a big raw hit is a big raw
-	/// number regardless of how large your life pool has grown. It is deliberately UNCAPPED so that
-	/// "bigger boss = more sustain" keeps holding instead of plateauing at a low ceiling — the ramp
-	/// multiplies both damage dealt (so leech, being 30% of damage dealt, scales with it) and healing
-	/// received (potions, via ConsumableHealingPercent). See RampPerDamage.
+	/// <b>The BONUS is a FLAT amount equal to 2% of the ABSOLUTE damage you have taken in the window</b>
+	/// (reworked 2026-07-21), NOT a percentage and NOT a fraction of max life. Take 600 damage in the
+	/// last 10 seconds and you add +12 flat damage to every hit and +12 to every leech proc (you heal
+	/// 12 + the leech). That is the Mists-of-Pandaria idea in absolute terms: a harder-hitting boss
+	/// hands you a bigger flat number, on both offense and sustain, regardless of how large your life
+	/// pool has grown. See BonusFractionOfDamageTaken.
 	///
-	/// History: the ramp used to be a fraction of MAX life (damage ÷ statLifeMax2), and there used to
-	/// be a separate "Vengeful Recovery" heal-over-time plus a life-regen amplifier. All three were
-	/// removed on 2026-07-21 — the recovery HoT and the regen because the player wanted leech to be the
-	/// only heal, and the fraction-of-max driver because they wanted absolute damage taken to drive it.
+	/// The flat heal rides the shared leech proc rather than being its own on-hit heal (see
+	/// PostUpdateMiscEffects and CombatEffectStats.LifeLeechFlatBonus), so leech is still the ONLY
+	/// healing path — the bonus just lands on top of each leech.
+	///
+	/// History: the bonus used to be a fraction of MAX life (damage ÷ statLifeMax2) applied as a percent
+	/// multiplier, with a separate "Vengeful Recovery" heal-over-time and a life-regen amplifier. The HoT
+	/// and the regen were removed on 2026-07-21 (leech is the only heal); the driver was switched to
+	/// absolute damage the same day; and the multiplier was switched to a FLAT add (2026-07-21b) after the
+	/// percent version read as too big a nerf.
 	/// </summary>
 	public class VengeanceTalent : TalentBehaviour
 	{
@@ -46,10 +50,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		public override string DisplayName => "Vengeance";
 
 		public override string Description =>
-			"Your maximum life is doubled. Leech 30% of the damage you deal as life. For every 100 "
-			+ "damage you take in the last 10 seconds, gain +10% increased damage AND +10% increased "
-			+ "healing from all sources, with no ceiling — the harder a boss hits you, the harder you hit "
-			+ "and heal back. Vengeance grants no life regeneration: you heal only by fighting.";
+			"Your maximum life is doubled. Leech 30% of the damage you deal as life. Add 2% of the damage "
+			+ "you have taken in the last 10 seconds to your hits AND to each leech — take 600 damage and "
+			+ "you hit for +12 and heal for 12 on top of the leech. Vengeance grants no life regeneration: "
+			+ "you heal only by fighting.";
 
 		/// <summary>
 		/// How long a hit stays in the ramp. Raised 4s -> 10s on 2026-07-17 from play-test.
@@ -65,38 +69,28 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// exactly 75%, at 10s it is 30%. The model and the play-test agree on the mechanism, which is
 		/// why this is 10 and not a guess.
 		///
-		/// ⚠️ This is also a DAMAGE buff, not only a leech-uptime fix — the ramp multiplies GetDamage,
-		/// so a longer window means higher peak uptime on the offensive half too. The window also sets
-		/// how much damage banks into the now-uncapped absolute ramp (see RampPerDamage): a wider window
-		/// holds more damage, so it scales the ramp up as well. If Vengeance over-delivers on damage,
-		/// reach for RampPerDamage first; shortening this window is the second lever.
+		/// ⚠️ This is also a DAMAGE buff, not only a leech-uptime fix — the bonus adds flat damage, so a
+		/// longer window means both higher uptime and a bigger banked total (see BonusFractionOfDamageTaken):
+		/// a wider window holds more recent damage, so the flat add is larger. If Vengeance over-delivers,
+		/// reach for BonusFractionOfDamageTaken first; shortening this window is the second lever.
 		///
-		/// Public for the same reason as MaxRampBonus: the HUD states this window to the player, and
-		/// when it was 4s here and a hardcoded "(4s)" there, raising it to 10s left the readout lying.
+		/// Public because the HUD states this window to the player: when it was 4s here and a hardcoded
+		/// "(4s)" there, raising it to 10s left the readout lying. Read it from the talent, never restate it.
 		/// </summary>
 		public const float WindowSeconds = 10f;
 
 		/// <summary>
-		/// Ramp rate: fraction of increased damage &amp; healing granted per point of ABSOLUTE damage
-		/// taken inside the window. 0.001 → +0.1% per damage, i.e. <b>+10% per 100 damage taken</b>.
+		/// The bonus is a FLAT amount equal to this fraction of the ABSOLUTE damage taken in the window,
+		/// added to both your hits and your leech heals. 0.02 → take 600 damage in the last 10s and you
+		/// add +12 flat damage to every hit and +12 to every leech proc (so you heal 12 + the leech).
 		///
-		/// ⚠️ <b>This is THE balance dial for Vengeance, and the primary risk of the 2026-07-21 rework.</b>
-		/// It is deliberately UNCAPPED (see GetCurrentBonus) so a harder-hitting boss keeps ramping you —
-		/// and it multiplies DAMAGE DEALT, not just healing, on the pinnacle slot that is the whole mod's
-		/// balance reference (CLAUDE.md §6). A long boss fight banks thousands of damage in the 10s window,
-		/// so this can reach several-hundred-% on both offense and sustain. First guess only — expect to
-		/// LOWER it after the first Build+Reload. If Vengeance over-delivers, this is the number to move,
-		/// not the leech fraction or the life multiplier.
+		/// <b>Flat, not a multiplier (reworked 2026-07-21b).</b> The first cut of this rework made it a
+		/// percent multiplier on damage &amp; healing, which read as a big nerf against the old design; the
+		/// player asked for a flat add instead. Because it is flat, a fast/multi-hit weapon adds the full
+		/// amount to EVERY hit, so it is kept small — 10% was tuned down to 2% on 2026-07-21b as too strong.
+		/// This and WindowSeconds are the balance dials; watch it in play.
 		/// </summary>
-		private const float RampPerDamage = 0.001f;
-
-		/// <summary>
-		/// Display-only threshold: the HUD colours the readout gold once the ramp reaches this, to signal
-		/// "you're really cooking". It is <b>no longer a functional ceiling</b> — the 2026-07-21 rework made
-		/// the ramp uncapped (GetCurrentBonus does not clamp to it). Public so the HUD reads the real number
-		/// instead of hardcoding its own copy.
-		/// </summary>
-		public const float MaxRampBonus = 1.0f;
+		private const float BonusFractionOfDamageTaken = 0.02f;
 
 		private const float LifeMultiplier = 1.00f;
 		private const float LeechFraction = 0.30f;
@@ -111,11 +105,11 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// doubling compounds with Fortitude/Royal Jelly/Avatar of Flesh instead of summing into the
 		/// same additive bucket they share.
 		///
-		/// Note the interaction with the doubled life: because the ramp is now driven by ABSOLUTE damage
-		/// taken (see GetCurrentBonus, reworked 2026-07-21), doubling max life is a pure survivability
-		/// gain — it does NOT slow the ramp the way the old fraction-of-max driver did, where a bigger
-		/// pool made each hit a smaller share and so ramped less. Bigger boss hits ramp you faster
-		/// regardless of pool size, which is the whole point of the absolute driver.
+		/// Note the interaction with the doubled life: because the bonus is now driven by ABSOLUTE damage
+		/// taken (see GetBonusAmount, reworked 2026-07-21), doubling max life is a pure survivability
+		/// gain — it does NOT shrink the bonus the way the old fraction-of-max driver did, where a bigger
+		/// pool made each hit a smaller share and so a smaller bonus. Bigger boss hits mean a bigger flat
+		/// bonus regardless of pool size, which is the whole point of the absolute driver.
 		///
 		/// LifeLeech is declarative rather than a bespoke OnHitNPC heal because LifeLeechApplier
 		/// already owns the payout, the ~0.3s cooldown and the 15%-of-max-life per-hit cap. Rolling
@@ -201,32 +195,28 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		public override void ResetEffects(Player player)
 		{
-			float bonus = GetCurrentBonus(player);
+			float bonus = GetBonusAmount(player);
 			if (bonus <= 0f)
 				return;
 
-			player.GetDamage(DamageClass.Generic) *= 1f + bonus;
+			// Flat added damage — +12 to every hit at 600 damage taken, NOT a percentage. On Generic so it
+			// covers whatever the warrior swings; note a multi-hit weapon adds the full amount per hit.
+			player.GetDamage(DamageClass.Generic).Flat += bonus;
 		}
 
 		public override void PostUpdateMiscEffects(Player player)
 		{
-			float bonus = GetCurrentBonus(player);
+			float bonus = GetBonusAmount(player);
 			if (bonus <= 0f)
 				return;
 
-			// The ramp pays out twice: harder hits AND bigger heals, by the same percentage. Healing
-			// is the half that makes the life pool a resource rather than a countdown — you spend it
-			// getting hit and buy it back by swinging, and the more you are losing the better the
-			// exchange rate gets.
-			//
-			// <b>ConsumableHealingPercent, NOT HealingPercent, and the distinction is the whole bug.</b>
-			// Leech does not need this to ramp — it ALREADY does, because ResetEffects above multiplies
-			// GetDamage by the same (1 + bonus), so the ramp is baked into the damageDone that
-			// LifeLeechApplier takes its 30% of. Contributing to HealingPercent as well fed the ramp in
-			// a SECOND time on the payout, making a full-ramp heal 0.30 * baseHit * (1+r)^2 — 4x, where
-			// this talent's own docs promise 2x. Potions are the one heal with no damageDone to have
-			// ridden in on, which is why they get their own channel rather than losing the bonus.
-			CombatEffectStats.Get(player).ConsumableHealingPercent += bonus * 100f;
+			// The healing half is a FLAT add to each leech proc, routed through the shared leech pool's
+			// flat-bonus channel so it rides the SAME ~0.3s cooldown, valid-target check and not-at-full
+			// gating rather than becoming a second on-hit heal (CLAUDE.md §8 — "never write a second on-hit
+			// heal"). So a leech proc heals its normal amount PLUS this: 12 + leech at 600 damage taken. You
+			// heal only by fighting; there is no passive drip. Vengeance always carries 30% leech, so the
+			// applier never early-outs on a zero pool and this always has a proc to ride.
+			CombatEffectStats.Get(player).LifeLeechFlatBonus += bonus;
 		}
 
 		/// <summary>Raw damage taken inside the window. What the HUD prints.</summary>
@@ -239,19 +229,14 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// Current bonus as a fraction, applied to both damage dealt (ResetEffects) and healing received
-		/// (PostUpdateMiscEffects → potions; leech rides in via the ramped damage dealt).
-		///
-		/// <b>Driven by ABSOLUTE damage taken, and UNCAPPED.</b> This is the 2026-07-21 rework: it used
-		/// to be (GetRecentDamage / statLifeMax2) * 1.5 clamped to MaxRampBonus — a fraction of max life,
-		/// which fell off across progression because a fixed raw hit is a shrinking share of a growing
-		/// pool. Keying off the raw damage number instead makes a harder-hitting boss ramp you harder, and
-		/// removing the clamp lets that keep holding instead of plateauing. See RampPerDamage — it is now
-		/// the whole balance surface, and it multiplies OFFENSE as well as healing, so watch it.
+		/// The current FLAT bonus: 2% of the absolute damage taken in the window. Added as flat damage to
+		/// every hit (ResetEffects) and as a flat heal to every leech proc (PostUpdateMiscEffects →
+		/// CombatEffectStats.LifeLeechFlatBonus). Not a percentage and not capped — it simply tracks how
+		/// hard you have been hit lately, in raw HP. What the HUD prints.
 		/// </summary>
-		public float GetCurrentBonus(Player player)
+		public float GetBonusAmount(Player player)
 		{
-			return GetRecentDamage() * RampPerDamage;
+			return GetRecentDamage() * BonusFractionOfDamageTaken;
 		}
 
 		private class DamageEntry
