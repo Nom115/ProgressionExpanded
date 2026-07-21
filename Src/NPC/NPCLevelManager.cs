@@ -96,6 +96,22 @@ namespace ProgressionExpanded.Src.NPCs
 		{
 			if (levelInitialized) return;
 
+			// Worm-boss segment: share the head's level so the whole body scales uniformly. Gated on
+			// IsTrackedBoss so only BOSS worms harmonise; non-boss worms roll per-segment as before.
+			if (WormBossHelper.IsSegment(npc) && BossProgressionTracker.IsTrackedBoss(npc))
+			{
+				NPC head = WormBossHelper.ResolveHead(npc);
+				if (head != null)
+				{
+					var headManager = head.GetGlobalNPC<NPCLevelManager>();
+					if (!headManager.levelInitialized)
+						headManager.InitializeLevel(head); // ensure the head has rolled first
+					SetLevel(npc, headManager.npcLevel); // also runs ApplyLevelScaling on this segment
+					return;
+				}
+				// head unresolved — fall through to a normal roll (rare edge)
+			}
+
 			int worldLevel = WorldLevelManager.GetWorldLevel();
 
 			// Overworld hugs the world level; depth and danger biomes bias the offset upward so deep
@@ -133,10 +149,16 @@ namespace ProgressionExpanded.Src.NPCs
 
 		#region NPC Hooks
 
-		public override void OnSpawn(Terraria.NPC npc, IEntitySource source)
+		/// <summary>
+		/// Per-NPC level init runs from PostAI, NOT OnSpawn. Worm-boss segment linkage
+		/// (<see cref="NPC.realLife"/>) is stamped by the head's AI and is not yet available at OnSpawn.
+		/// PostAI runs after vanilla AI, so a segment can copy its head's level the first time it ticks
+		/// (the head, at a lower index, initialises first). The existing lazy backstops in ModifyHitBy* /
+		/// GetLevel / CalculateXPReward still cover anything interacted with before it ticks.
+		/// </summary>
+		public override void PostAI(Terraria.NPC npc)
 		{
-			// Initialize level when NPC spawns
-			if (!npc.friendly && npc.lifeMax > 5) // Only for hostile NPCs with reasonable health
+			if (!levelInitialized && !npc.friendly && npc.lifeMax > 5) // Only for hostile NPCs with reasonable health
 			{
 				InitializeLevel(npc);
 			}

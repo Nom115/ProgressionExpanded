@@ -25,23 +25,32 @@ namespace ProgressionExpanded.Utils
 		/// Stable identity for a boss NPC. Modded NPCs expose a persistent
 		/// "ModName/InternalName" (<see cref="ModNPC.FullName"/>); vanilla NPCs use their
 		/// (stable) net id. This is what makes the whole system mod-agnostic.
+		///
+		/// Multi-segment worm bosses resolve to their head (<see cref="WormBossHelper.ResolveHead"/>),
+		/// so every segment of an Eater of Worlds / Destroyer shares one identity — the whole worm is
+		/// one boss for pinnacle/defeat purposes. Heads and standalone enemies resolve to themselves.
 		/// </summary>
 		public static string GetBossKey(NPC npc)
 		{
-			if (npc.ModNPC != null)
-				return npc.ModNPC.FullName;
+			NPC identity = WormBossHelper.ResolveHead(npc) ?? npc;
 
-			return "Terraria/" + npc.netID;
+			if (identity.ModNPC != null)
+				return identity.ModNPC.FullName;
+
+			return "Terraria/" + identity.netID;
 		}
 
 		/// <summary>
 		/// Whether this NPC should be treated as a boss for progression purposes.
 		/// Covers vanilla/modded bosses (<see cref="NPC.boss"/>) plus anything a mod flags
-		/// via <see cref="NPCID.Sets.ShouldBeCountedAsBoss"/> (e.g. event minibosses).
+		/// via <see cref="NPCID.Sets.ShouldBeCountedAsBoss"/> (e.g. event minibosses). A worm-boss
+		/// segment inherits its head's status via <see cref="WormBossHelper.ResolveHead"/>.
 		/// </summary>
 		public static bool IsTrackedBoss(NPC npc)
 		{
-			return npc.boss || NPCID.Sets.ShouldBeCountedAsBoss[npc.type];
+			NPC identity = WormBossHelper.ResolveHead(npc) ?? npc;
+
+			return identity.boss || NPCID.Sets.ShouldBeCountedAsBoss[identity.type];
 		}
 
 		/// <summary>

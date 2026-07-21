@@ -26,10 +26,10 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 	/// what this talent punishes — which is why Fleshless (no regeneration, 40% DR) is a natural partner
 	/// rather than the trap it is next to Stagger.
 	///
-	/// <b>The BONUS is a FLAT amount equal to 2% of the ABSOLUTE damage you have taken in the window</b>
+	/// <b>The BONUS is a FLAT amount equal to 3% of the ABSOLUTE damage you have taken in the window</b>
 	/// (reworked 2026-07-21), NOT a percentage and NOT a fraction of max life. Take 600 damage in the
-	/// last 10 seconds and you add +12 flat damage to every hit and +12 to every leech proc (you heal
-	/// 12 + the leech). That is the Mists-of-Pandaria idea in absolute terms: a harder-hitting boss
+	/// last 10 seconds and you add +18 flat damage to every hit and +18 to every leech proc (you heal
+	/// 18 + the leech). That is the Mists-of-Pandaria idea in absolute terms: a harder-hitting boss
 	/// hands you a bigger flat number, on both offense and sustain, regardless of how large your life
 	/// pool has grown. See BonusFractionOfDamageTaken.
 	///
@@ -96,13 +96,13 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 		/// <summary>
 		/// The bonus is a FLAT amount equal to this fraction of the ABSOLUTE damage taken in the window,
-		/// added to both your hits and your leech heals. 0.02 → take 600 damage in the last 10s and you
-		/// add +12 flat damage to every hit and +12 to every leech proc (so you heal 12 + the leech).
+		/// added to both your hits and your leech heals. 0.03 → take 600 damage in the last 10s and you
+		/// add +18 flat damage to every hit and +18 to every leech proc (so you heal 18 + the leech).
 		///
 		/// <b>Flat, not a multiplier (reworked 2026-07-21b).</b> The first cut of this rework made it a
 		/// percent multiplier on damage &amp; healing, which read as a big nerf against the old design; the
 		/// player asked for a flat add instead. Because it is flat, a fast/multi-hit weapon adds the full
-		/// amount to EVERY hit, so it is kept small — 10% was tuned down to 2% on 2026-07-21b as too strong.
+		/// amount to EVERY hit, so it is kept small — 10% was tuned down to 3% on 2026-07-21b as too strong.
 		/// This and WindowSeconds are the balance dials; watch it in play.
 		/// </summary>
 		private const float BonusFractionOfDamageTaken = 0.03f;
@@ -214,7 +214,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			if (bonus <= 0f)
 				return;
 
-			// Flat added damage — +12 to every hit at 600 damage taken, NOT a percentage. On Generic so it
+			// Flat added damage — +18 to every hit at 600 damage taken, NOT a percentage. On Generic so it
 			// covers whatever the warrior swings; note a multi-hit weapon adds the full amount per hit.
 			player.GetDamage(DamageClass.Generic).Flat += bonus;
 		}
@@ -228,7 +228,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			// The healing half is a FLAT add to each leech proc, routed through the shared leech pool's
 			// flat-bonus channel so it rides the SAME ~0.3s cooldown, valid-target check and not-at-full
 			// gating rather than becoming a second on-hit heal (CLAUDE.md §8 — "never write a second on-hit
-			// heal"). So a leech proc heals its normal amount PLUS this: 12 + leech at 600 damage taken. You
+			// heal"). So a leech proc heals its normal amount PLUS this: 18 + leech at 600 damage taken. You
 			// heal only by fighting; there is no passive drip. Vengeance always carries 30% leech, so the
 			// applier never early-outs on a zero pool and this always has a proc to ride.
 			CombatEffectStats.Get(player).LifeLeechFlatBonus += bonus;
@@ -244,7 +244,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		}
 
 		/// <summary>
-		/// The current FLAT bonus: 2% of the absolute damage taken in the window. Added as flat damage to
+		/// The current FLAT bonus: 3% of the absolute damage taken in the window. Added as flat damage to
 		/// every hit (ResetEffects) and as a flat heal to every leech proc (PostUpdateMiscEffects →
 		/// CombatEffectStats.LifeLeechFlatBonus). Not a percentage and not capped — it simply tracks how
 		/// hard you have been hit lately, in raw HP. What the HUD prints.

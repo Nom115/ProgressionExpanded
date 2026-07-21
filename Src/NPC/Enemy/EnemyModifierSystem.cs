@@ -23,9 +23,19 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 
 		#region Initialization
 
-		public override void OnSpawn(Terraria.NPC npc, Terraria.DataStructures.IEntitySource source)
+		/// <summary>
+		/// Per-NPC init runs from PostAI, NOT OnSpawn. Worm-boss segment linkage
+		/// (<see cref="NPC.realLife"/>) is stamped by the head's AI and is not yet available at
+		/// OnSpawn. PostAI runs after vanilla AI, and the head (lower index) initialises before the
+		/// segments it spawned, so a segment can copy the head's roll the first time it ticks. The
+		/// one-frame delay for ordinary enemies is immaterial (nothing reads rarity/modifiers before
+		/// the enemy is first drawn or hit).
+		/// </summary>
+		public override void PostAI(Terraria.NPC npc)
 		{
-			// Only apply to hostile NPCs
+			if (modifiersInitialized) return;
+
+			// Only apply to hostile NPCs (matches the old OnSpawn filter).
 			if (npc.friendly || npc.townNPC || npc.lifeMax <= 5) return;
 
 			InitializeModifiers(npc);
@@ -35,8 +45,9 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 		{
 			if (modifiersInitialized) return;
 
-			// Pinnacle first encounter (works for vanilla AND modded bosses): leave the boss
-			// completely untouched — no rarity stat changes, no affix modifiers.
+			// Pinnacle first encounter (works for vanilla AND modded bosses — and, because boss identity
+			// is now worm-aware, for every segment of a worm boss): leave completely untouched, no
+			// rarity stat changes, no affix modifiers.
 			if (BossProgressionTracker.IsPinnacleEncounter(npc))
 			{
 				rarity = EnemyRarity.Common;
@@ -46,32 +57,44 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 				return;
 			}
 
-			// Roll rarity
+			// Worm-boss segment: copy the head's roll so the whole body is uniform (one rarity + one
+			// modifier set across every piece) instead of each segment rolling independently. Gated on
+			// IsTrackedBoss so only BOSS worms harmonise; non-boss worms (desert worms) roll per-segment
+			// as before.
+			if (WormBossHelper.IsSegment(npc) && BossProgressionTracker.IsTrackedBoss(npc))
+			{
+				CopyFromHead(npc);
+				return;
+			}
+
+			// Roll rarity (worm-boss head or standalone enemy).
 			rarity = EnemyRarityConfig.RollRarity();
 			var rarityInfo = EnemyRarityConfig.GetRarityInfo(rarity);
 
 			// Apply rarity stat multipliers
 			ApplyRarityStats(npc, rarityInfo);
 
-			// Bosses that have already been defeated at least once always get 2-5 modifiers.
-			if (npc.boss)
+			// Decide how many modifiers to roll.
+			int modifierCount;
+			if (WormBossHelper.IsHead(npc) && BossProgressionTracker.IsTrackedBoss(npc))
 			{
-				int modifierCount = Main.rand.Next(2, 6); // 2-5 modifiers
-				modifiers = ModifierPool.RollModifiers(modifierCount, npc);
-
-				// Apply each modifier
-				foreach (var modifier in modifiers)
-				{
-					modifier.Apply(npc);
-				}
+				// Worm boss head: exactly ONE modifier for the whole body — segments copy this.
+				modifierCount = 1;
 			}
-			// Normal enemies - use rarity-based modifiers
-			else if (rarityInfo.MaxModifiers > 0)
+			else if (npc.boss)
 			{
-				int modifierCount = Main.rand.Next(1, rarityInfo.MaxModifiers + 1);
-				modifiers = ModifierPool.RollModifiers(modifierCount, npc);
+				// Non-worm bosses that have already been defeated always get 2-5 modifiers.
+				modifierCount = Main.rand.Next(2, 6);
+			}
+			else
+			{
+				// Normal enemies — rarity-based modifier count (0 for Common).
+				modifierCount = rarityInfo.MaxModifiers > 0 ? Main.rand.Next(1, rarityInfo.MaxModifiers + 1) : 0;
+			}
 
-				// Apply each modifier
+			if (modifierCount > 0)
+			{
+				modifiers = ModifierPool.RollModifiers(modifierCount, npc);
 				foreach (var modifier in modifiers)
 				{
 					modifier.Apply(npc);
@@ -81,6 +104,42 @@ namespace ProgressionExpanded.Src.NPCs.Enemy
 			// Generate display name
 			GenerateDisplayName(npc, rarityInfo);
 
+			modifiersInitialized = true;
+		}
+
+		/// <summary>
+		/// Copy a worm-boss head's rolled rarity + modifiers onto this segment so the whole body is
+		/// uniform. Leaves this segment uninitialised (retries next PostAI tick) if the head has not
+		/// rolled yet — though given NPC update order the head always initialises first.
+		/// </summary>
+		private void CopyFromHead(Terraria.NPC npc)
+		{
+			NPC head = WormBossHelper.ResolveHead(npc);
+			if (head == null) return; // head not resolvable yet — retry next tick
+
+			var headSystem = head.GetGlobalNPC<EnemyModifierSystem>();
+			if (!headSystem.modifiersInitialized)
+				headSystem.InitializeModifiers(head); // ensure the head has rolled first (order-independent)
+			if (!headSystem.modifiersInitialized) return; // head still couldn't roll — retry next tick
+
+			rarity = headSystem.rarity;
+			var rarityInfo = EnemyRarityConfig.GetRarityInfo(rarity);
+
+			// Scale this segment's own base stats by the shared rarity multiplier.
+			ApplyRarityStats(npc, rarityInfo);
+
+			// Fresh instances of the head's modifier types, applied to this segment. Deep-copying by
+			// type (rather than sharing references) keeps stateful affixes from cross-talking — the same
+			// idiom as Clone(). Each modifier's one-time stat changes are applied here to this segment.
+			modifiers = new List<IModifier>(headSystem.modifiers.Count);
+			foreach (var modifier in headSystem.modifiers)
+			{
+				var instance = (IModifier)System.Activator.CreateInstance(modifier.GetType());
+				instance.Apply(npc);
+				modifiers.Add(instance);
+			}
+
+			GenerateDisplayName(npc, rarityInfo);
 			modifiersInitialized = true;
 		}
 
