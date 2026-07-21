@@ -16,8 +16,10 @@ namespace ProgressionExpanded.Src.UI
 	/// Hover panel that reveals an enemy's per-element resistance profile — the missing half of the
 	/// elemental system's legibility. The per-enemy resistance roll (see <see cref="ElementalResistance"/>)
 	/// is otherwise invisible: a +40% fire roll shows nothing on screen, and wards land in un-named
-	/// modifier slots on most repeat bosses. Hovering an enemy shows its name in its rarity colour and
-	/// one row per element, so the player can read the matchup and switch element before swinging.
+	/// modifier slots on most repeat bosses. Hovering an enemy shows, in a fixed panel anchored to the
+	/// bottom-right of the screen, its name in its rarity colour and one row per element, so the player
+	/// can read the matchup and switch element before swinging. (The panel is hover-triggered but no
+	/// longer cursor-following — it sits in a stable corner so it doesn't jump around or occlude the fight.)
 	///
 	/// The numbers are the enemy's INTRINSIC resistance (penetration 0), not what any particular build
 	/// would deal — it is a "know your enemy" readout, so it must not drift with the local player's gear.
@@ -131,24 +133,22 @@ namespace ProgressionExpanded.Src.UI
 					maxWidth = rowWidth;
 			}
 
-			// Box geometry, then clamp to the screen so it never spills off an edge near a corner.
+			// Box geometry.
 			float padX = 10f * scale;
 			float padY = 8f * scale;
 			float boxW = maxWidth + padX * 2f;
 			float boxH = lineHeight * (count + 1) + padY * 2f;
 
-			// Coordinate spaces differ here and it is the whole bug. This layer draws in
-			// InterfaceScaleType.UI, whose canvas is UI space: Main.screenWidth/Height are already in it
-			// (they are raw ÷ Main.UIScale) and boxW/boxH are too (measured from the UI-space font). But
-			// Main.mouseX/Y are RAW screen pixels — proven by FindHoveredEnemy comparing them against a
-			// world-derived rect. Using the raw cursor as a UI coordinate multiplied it by UIScale, which
-			// shoved the panel far to the lower-right and off-screen at any UIScale != 1 (the reported
-			// invisibility). Divide the cursor into UI space; leave the already-UI-space bounds alone.
-			float uiScale = Main.UIScale <= 0f ? 1f : Main.UIScale;
-
-			var origin = new Vector2(Main.mouseX / uiScale + 20f, Main.mouseY / uiScale + 20f);
-			if (origin.X + boxW > Main.screenWidth) origin.X = Main.screenWidth - boxW - 4f;
-			if (origin.Y + boxH > Main.screenHeight) origin.Y = Main.screenHeight - boxH - 4f;
+			// Fixed bottom-right anchor rather than cursor-following. This layer draws in
+			// InterfaceScaleType.UI, whose canvas is UI space, and Main.screenWidth/Height are already in it
+			// (they are raw ÷ Main.UIScale) — as are boxW/boxH (measured from the UI-space font). So the
+			// anchor is a straight subtraction from the screen bounds with a margin; no cursor, no UIScale
+			// division. (The old mouse-anchored version divided Main.mouseX/Y — RAW pixels — into UI space;
+			// that whole coordinate hazard is gone with the fixed position.)
+			float margin = 16f * scale;
+			var origin = new Vector2(
+				Main.screenWidth - boxW - margin,
+				Main.screenHeight - boxH - margin);
 			if (origin.X < 0f) origin.X = 0f;
 			if (origin.Y < 0f) origin.Y = 0f;
 
