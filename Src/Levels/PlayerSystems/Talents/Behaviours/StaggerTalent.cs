@@ -72,7 +72,8 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			"+150 maximum life and +8 life regeneration per second. Your maximum mana "
 			+ "is increased by 50% of your maximum life. 55% of the damage you take is dealt to you over "
 			+ "5.5 seconds instead of all at once, and that damage is drained from your mana before it "
-			+ "touches your life — but only while you have mana left to arm it. Critical hits burn away "
+			+ "touches your life — but only while you have mana left to arm it. The 45% that still reaches "
+			+ "your life is reduced by a flat 5% of your maximum mana. Critical hits burn away "
 			+ "25% of the remaining damage, once per second. Your mana only recovers while you stand "
 			+ "still; while you move, you regenerate an extra 2% of your maximum life per second instead. "
 			+ "Plant to refill the pool, move to repair the bar.";
@@ -131,6 +132,19 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		/// which resource you actually need.
 		/// </summary>
 		private const float MovingLifeRegenFraction = 0.02f;
+
+		/// <summary>
+		/// Flat reduction applied to the HEALTH-bound portion of a hit (the immediate 45%), as a fraction
+		/// of MAXIMUM mana. The 55% that becomes the bleed is paid from mana first and is deliberately
+		/// untouched — this only blunts what reaches life.
+		///
+		/// Untested first guess. Subtractive by nature, so a fixed number is a large % of a small hit and a
+		/// small % of a big one — the same shape as flat defense. But it is scoped to ONE talent and to
+		/// ONLY the immediate life damage (never the mana bleed, which is Stagger's real mitigation), so it
+		/// does not recreate the inter-pinnacle defense cliff the class notes above warn about, and it does
+		/// not route through statDefense/Endurance — no Bone Armor feed, no Fargo 0.75 Endurance clamp.
+		/// </summary>
+		private const float HealthFlatReductionFraction = 0.05f;
 
 		/// <summary>
 		/// Empty, and deliberately so — see below.
@@ -192,6 +206,14 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 		private float accumulatedDamage;
 
 		private float pendingStaggerPercent;
+
+		/// <summary>
+		/// Flat amount removed from the immediate hit this frame (health-only, see
+		/// HealthFlatReductionFraction). Carried from ModifyHurt to PostHurt, which adds it back before
+		/// reconstructing the bleed so the 55% stays a true 55% of the raw hit rather than being shrunk
+		/// by a cut that was only ever meant for life.
+		/// </summary>
+		private float pendingFlatReduction;
 
 		/// <summary>
 		/// Set while we deal the bleed. Player.Hurt re-enters ModifyHurt/PostHurt, so without this
@@ -445,6 +467,7 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 			if (applyingStaggerDamage)
 			{
 				pendingStaggerPercent = 0f;
+				pendingFlatReduction = 0f;
 				return;
 			}
 
@@ -484,21 +507,49 @@ namespace ProgressionExpanded.Src.Levels.PlayerSystems.Talents.Behaviours
 
 			pendingStaggerPercent = DamagePercent;
 			modifiers.FinalDamage *= 1f - pendingStaggerPercent;
+
+			// Flat health armor: shave 5% of MAX mana off the immediate (life) portion only. .Flat is
+			// applied OUTSIDE the split multiply above ((x+Base)*Add*Mult + Flat), so it reduces only what
+			// reaches life and never shrinks the 55% mana-paid bleed. PostHurt adds it back before
+			// reconstructing that bleed. Applied only in this armed branch, so an empty or capped pool still
+			// takes the whole hit — the flat armor rides the split, mirroring the empty-pool cliff above.
+			//
+			// Local-copy-and-reassign rather than a direct modifiers.FinalDamage.Flat -= flat, so it is
+			// valid whether HurtModifiers.FinalDamage is a field or a copy-returning property.
+			float flat = player.statManaMax2 * HealthFlatReductionFraction;
+			StatModifier fd = modifiers.FinalDamage;
+			fd.Flat -= flat;
+			modifiers.FinalDamage = fd;
+			pendingFlatReduction = flat;
 		}
 
 		public override void PostHurt(Player player, Player.HurtInfo info)
 		{
 			// Our own bleed re-enters Hurt every tick it lands. It is not a fresh hit.
 			if (applyingStaggerDamage)
+			{
+				pendingFlatReduction = 0f;
 				return;
+			}
 
 			if (pendingStaggerPercent <= 0f)
+			{
+				pendingFlatReduction = 0f;
 				return;
+			}
 
 			// info.Damage is post-mitigation, so this inverts the ModifyHurt multiply to recover the
-			// portion that was removed.
-			float staggeredDamage = info.Damage * (pendingStaggerPercent / (1f - pendingStaggerPercent));
+			// portion that was removed. Add the flat health cut back first: info.Damage is the immediate
+			// 45% AFTER that cut, so reconstructing from it directly would shrink the bleed by a reduction
+			// that was only ever meant for life. Adding it back keeps the bleed a true 55% of the raw hit.
+			//
+			// Small-hit floor artifact: if the flat fully absorbed the immediate, vanilla floored
+			// info.Damage to 1 and (1 + flat) slightly over-recovers the bleed — negligible, and only on
+			// sub-~5%-of-max-life hits against a pool that easily covers it.
+			float immediateBeforeFlat = info.Damage + pendingFlatReduction;
+			float staggeredDamage = immediateBeforeFlat * (pendingStaggerPercent / (1f - pendingStaggerPercent));
 			pendingStaggerPercent = 0f;
+			pendingFlatReduction = 0f;
 
 			if (staggeredDamage <= 0)
 				return;
